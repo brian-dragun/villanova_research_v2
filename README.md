@@ -1,28 +1,18 @@
-# LLM Weight Sensitivity Analysis Framework
+# Extreme Sensitivity Analysis (ESA) for Large Language Models
 
-This repository contains tools and scripts for analyzing the sensitivity, robustness, and performance characteristics of Large Language Models (LLMs).
+This repository contains tools and frameworks for conducting advanced sensitivity analysis on transformer-based language models, focusing on identifying and characterizing "super weights" - the most critical parameters within neural network architectures.
 
-## 📋 Table of Contents
+## 📋 Research Overview
 
-- [Project Overview](#project-overview)
-- [Directory Structure](#directory-structure)
-- [Setup Instructions](#setup-instructions)
-- [Available Commands](#available-commands)
-- [Analysis Types](#analysis-types)
-- [Working with Models](#working-with-models)
-- [Results Interpretation](#results-interpretation)
-- [Advanced Usage](#advanced-usage)
+This framework supports Ph.D. research on Extreme Sensitivity Analysis (ESA) in Large Language Models, with the following key objectives:
 
-## 🔍 Project Overview
+- **Super Weight Identification**: Discover and prioritize the most critical weights in transformer architectures
+- **Robustness Enhancement**: Improve model resilience against noise, perturbations, and adversarial attacks
+- **Efficient Pruning**: Enable knowledge-guided compression by preserving critical parameters
+- **Security Analysis**: Evaluate vulnerability to bit-flip attacks and memory corruption
+- **Method Comparison**: Compare traditional gradient-based sensitivity with LLM-based attribution methods
 
-This framework allows researchers to analyze various aspects of LLMs including:
-
-- **Weight Sensitivity**: Identify which layers/weights are most important for model performance
-- **Model Pruning**: Remove less important weights to create smaller, efficient models
-- **Robustness Testing**: Evaluate how models perform under noise or adversarial conditions
-- **Bit-level Analysis**: Examine effects of bit-level manipulations on model performance
-
-The framework is designed to work with Hugging Face Transformers models and supports a variety of architectures including Llama, GPT-Neo, GPT-J, OPT, BLOOM, Pythia, Falcon, and Mistral.
+The framework builds on Hugging Face Transformers and supports various architectures including Llama, GPT-Neo, GPT-J, OPT, BLOOM, Pythia, Falcon, and Mistral.
 
 ## 📁 Directory Structure
 
@@ -40,27 +30,33 @@ villanova_research_v2/
 ├── llm_evaluate_models.py           # Model evaluation utilities
 ├── llm_integrated_analysis.py       # Combined analysis pipeline
 ├── llm_analyze_sensitivity.py       # Additional sensitivity analysis tools
-├── llm_super_weights.py             # Super-weights identification
+├── llm_super_weights.py             # Super-weights identification algorithms
 ├── llm_robust_analysis_display.py   # Results visualization utilities
 ├── llm_train.py                     # Fine-tuning utilities
+├── selective_weight_pruning.py      # Tool for targeted pruning based on sensitivity
 ├── requirements.txt                 # Python dependencies
 ├── LLM_RESEARCH.md                  # Research methodology documentation
 ├── model_cache/                     # Downloaded pre-trained models
-│   ├── models--EleutherAI--gpt-neo-125m/  # Cached GPT-Neo model
-│   └── models--meta-llama--Llama-2-7b-hf/ # Cached Llama model
 ├── data/                            # Modified model data (pruned/noisy versions)
-│   ├── gpu_llm_finetuned_*          # Fine-tuned model directories
-│   ├── gpu_llm_pruned_*.pth         # Pruned model weights
-│   └── gpu_llm_noisy_*.pth          # Noisy model weights
 ├── outputs/                         # Analysis results
-│   └── sensitivity_*/               # Sensitivity analysis results
-│       ├── ablation_results.json    # Raw results data
-│       ├── ablation_results.png     # Results visualization
-│       └── analysis_report.txt      # Human-readable report
 ├── utils/                           # Utility functions
 ├── llm_analysis/                    # Additional analysis modules
 └── archive/                         # Archived code versions
 ```
+
+## 🔬 Research Methodology
+
+This framework implements several approaches to sensitivity analysis:
+
+1. **Layer Ablation**: Zero out weights and measure performance degradation
+2. **Gradient-based Analysis**: Use gradients to estimate parameter importance
+3. **Hessian-based Analysis**: Second-order derivatives for more accurate sensitivity
+4. **Noise Injection**: Controlled noise addition to test robustness 
+5. **Bit-level Manipulation**: Simulate hardware faults through bit flips
+6. **LLM-based Attribution**: Novel approach using language models for weight attribution
+7. **Integrated Gradients**: Attribution through gradient path integration
+
+Each analysis method helps identify different aspects of weight sensitivity and contributes to a comprehensive understanding of model robustness.
 
 ## 🚀 Setup Instructions
 
@@ -111,6 +107,44 @@ python run_analysis.py --analysis pruning
 python run_analysis.py --model gpt-neo-125m --analysis robustness
 ```
 
+### Super-Weights Analysis Commands
+
+```bash
+# Identify super weights using gradient-based sensitivity
+python run_analysis.py --model gpt-neo-125m --analysis super-weights --method gradient
+
+# Use statistical z-score method for super weight identification
+python run_analysis.py --model gpt-neo-125m --analysis super-weights --method z_score
+
+# Use Hessian-based approach (more computationally intensive but more accurate)
+python run_analysis.py --model gpt-neo-125m --analysis super-weights --method hessian
+
+# Use integrated gradients for attribution (balanced approach)
+python run_analysis.py --model gpt-neo-125m --analysis super-weights --method integrated
+```
+
+### Selective Weight Pruning Commands
+
+```bash
+# Basic syntax
+python selective_weight_pruning.py --model MODEL_NAME --method METHOD --component COMPONENT --layers LAYERS --percentile PERCENTILE --threshold THRESHOLD --prune-method METHOD --evaluate
+
+# Example: Prune specific transformer layers using gradient-based sensitivity
+python selective_weight_pruning.py --model gpt-neo-125m --method gradient --component value --layers transformer.h.3,transformer.h.4 --percentile 80 --threshold 0.3 --prune-method zero --evaluate
+
+# Important: Make sure to use the correct model name format with dashes (e.g., "gpt-neo-125m" NOT "gptneo125m")
+```
+
+### Comparative Analysis Commands
+
+```bash
+# Compare different sensitivity methods (comma-separated list)
+python run_analysis.py --model gpt-neo-125m --analysis compare-sensitivity --methods gradient,z_score,integrated
+
+# Run targeted perturbation on identified super weights
+python run_analysis.py --model gpt-neo-125m --analysis targeted-perturbation
+```
+
 ### Listing Available Options
 
 ```bash
@@ -121,12 +155,6 @@ python run_analysis.py --list-models
 python run_analysis.py --list-analyses
 ```
 
-### Running a Model Directly
-
-```bash
-python run_model.py --model MODEL_NAME --prompt "Your prompt here"
-```
-
 ### Advanced Options
 
 ```bash
@@ -135,6 +163,9 @@ python run_analysis.py --skip-finetune
 
 # Specify custom output directory
 python run_analysis.py --output-dir ./my_custom_output
+
+# Change sensitivity threshold for super weight identification
+python run_analysis.py --analysis super-weights --threshold 0.8
 ```
 
 ## 📊 Analysis Types
@@ -164,6 +195,23 @@ The framework supports several analysis types:
 
 7. **evaluate**: Evaluate model performance on benchmark tasks
    - Measures standard metrics for comparing models
+
+8. **super-weights**: Identify and analyze critical weights
+   - Uses gradient or Hessian-based methods to find "super weights"
+   - Supports multiple identification methods: gradient, z_score, hessian, integrated
+
+9. **compare-sensitivity**: Compare different sensitivity methods
+   - Evaluates gradient, ablation, z-score, and integrated gradients methods
+   - Measures agreement between methods using Jaccard similarity
+   - Compares computational efficiency and execution time
+
+10. **targeted-perturbation**: Test robustness by perturbing only super weights
+    - Focuses on the most critical weights for targeted analysis
+    - Creates impact visualization showing relationship between % weights perturbed and performance degradation
+
+11. **selective-weight-pruning**: Targeted pruning based on sensitivity analysis
+    - Allows pruning specific layers or components using various sensitivity methods
+    - Evaluates performance changes post-pruning
 
 ## 🤖 Working with Models
 
@@ -198,43 +246,121 @@ Analysis results are saved to the `outputs/` directory with the following struct
   - `ablation_results.json`: Raw numerical results
   - `ablation_results.png`: Visualization of perplexity changes
   - `analysis_report.txt`: Human-readable report explaining results
+  - `sensitivity_map.png`: Heatmap showing sensitivity across model layers
+  - `super_weights.json`: Identified super-weights with sensitivity scores
+  - `perturbation_impact.png`: Graph showing impact of perturbing super weights
+  - `method_similarity.png`: Similarity matrix comparing sensitivity methods
 
-For sensitivity analysis, higher perplexity increases after ablation indicate more important layers.
+For selective weight pruning analysis, the results include:
+- `output_comparison.txt`: Shows the comparison between original and pruned model outputs
+- Visualizations of how pruning affects specific layers
+- Performance metrics before and after pruning
 
-## 🔧 Advanced Usage
+### Expected Output from Selective Weight Pruning
 
-### Custom Ablation Targets
+When running selective weight pruning commands, you can expect significant changes in model output behavior. For example, pruning the GPT-Neo-125m model shows:
 
-Edit the appropriate analysis script to target specific layers:
+**Original model** tends to repeat phrases and struggle with the actual question, producing text like:
+```
+In a galaxy far and away, in the far-west, far away you can see the galaxies in the far-west, far away. This is a great movie, and you can really see the galaxy in the far-west at the same time.
+```
+
+**Pruned model** produces dramatically different output with a more article-like structure:
+```
+(Image: Getty)
+
+By
+
+Michael A.
+
+When you first get hooked on the genre, it's easy to see why. The movie industry is still largely unknown...
+```
+
+These differences highlight how selective pruning can fundamentally alter the model's generation patterns, which is valuable for understanding the role specific weights play in different aspects of text generation.
+
+For super-weights analysis, the results include:
+- Lists of the most sensitive weights per layer
+- Layer-wise sensitivity distribution
+- Perturbation impact analysis
+- Performance degradation curves
+
+## 🔧 Advanced Research Usage
+
+### Super Weight Identification Methods
 
 ```python
-# Example in llm_weight_sensitivity_analysis.py
-layers_to_ablate = ["model.layers.5.mlp.gate_proj.weight"]  # Change to test different layers
+# In llm_super_weights.py
+# Gradient-based sensitivity
+sensitivity_data = compute_gradient_sensitivity(model, tokenizer, prompt)
+
+# Hessian-based sensitivity
+sensitivity_data = compute_hessian_sensitivity(model, tokenizer, prompt)
+
+# Integrated gradients
+sensitivity_data = compute_integrated_gradients(model, tokenizer, prompt)
+
+# Z-score statistical outliers
+super_weights, layer_summary = identify_super_weights(model, z_threshold=2.5)
 ```
 
-### Working with Locally Modified Models
+### Comparing Sensitivity Methods
 
-```bash
-# First run a pruning analysis to create a pruned model
-python run_analysis.py --model gpt-neo-125m --analysis pruning
-
-# Then analyze the pruned model's characteristics
-# The system will automatically use the pruned version from data/
-python run_analysis.py --model gpt-neo-125m --analysis robustness
+```python
+# Run comparative analysis between methods
+results = compare_sensitivity_methods(
+    model=model,
+    tokenizer=tokenizer,
+    prompt="What is machine learning?",
+    output_dir="./outputs/comparison",
+    methods=["gradient", "z_score", "integrated"]
+)
 ```
 
-### Extending the Framework
+### Targeted Perturbation Testing
 
-Create new analysis modules by following the pattern in existing files:
-1. Create a new file `llm_my_analysis.py`
-2. Implement a `main(model_name=None, output_dir=None)` function
-3. Add your analysis to the dictionary in `run_analysis.py`
+```python
+# Test impact of perturbing super weights
+results = ablation_sensitivity_test(
+    model=model,
+    tokenizer=tokenizer,
+    sensitivity_data=sensitivity_data,
+    prompt="What is machine learning?",
+    output_dir="./outputs/perturbation"
+)
+```
+
+### Extending with Custom Sensitivity Metrics
+
+Create new sensitivity metrics by adding methods to the `llm_super_weights.py` file:
+
+```python
+# Example of implementing a new sensitivity metric
+def custom_sensitivity_metric(model, tokenizer, dataset):
+    # Implementation here
+    pass
+```
+
+## 📊 Visualization Examples
+
+The framework generates various visualizations to help interpret results:
+
+- **Layer-wise Sensitivity Distribution**: Bar chart showing which layers contain the most super weights
+- **Perturbation Impact Curve**: Line chart showing how model performance degrades as more super weights are perturbed
+- **Method Similarity Matrix**: Heatmap showing the Jaccard similarity between different sensitivity methods
+- **Execution Time Comparison**: Bar chart comparing the computational efficiency of different methods
 
 ## 🧪 Troubleshooting
 
 - **CUDA out of memory**: Use a smaller model or enable 8-bit quantization in `config.py`
 - **Authentication errors**: Ensure your HF token is correctly set in `.env`
 - **Module not found**: Check that all dependencies are installed via `pip install -r requirements.txt`
+- **Model not found errors**: Make sure to use the correct model name format with dashes (e.g., "gpt-neo-125m" not "gptneo125m")
+
+## 📝 Research Citations
+
+When using this framework in research publications, please cite:
+
+[Your citation information here]
 
 ## 📄 License
 

@@ -140,9 +140,20 @@ MODEL_CONFIG = {
     "use_auth_token": HF_TOKEN,
     "trust_remote_code": True,
     "device_map": "auto",  # Automatically distribute model across available GPUs
-    "load_in_8bit": False,  # Set to True to load in 8-bit precision (requires bitsandbytes)
+    "load_in_8bit": True,  # Enable 8-bit quantization for memory efficiency
     "cache_dir": CACHE_DIR,  # Use local cache
+    "torch_dtype": "auto",  # Automatically use the most memory-efficient precision
 }
+
+# Advanced model configuration
+ADVANCED_MODEL_CONFIG = {
+    "use_flash_attention": True,    # Use flash attention for faster transformer operations
+    "use_memory_efficient_attention": True,  # More memory efficient attention implementation
+    "low_cpu_mem_usage": True,      # Reduce CPU memory usage during loading
+}
+
+# Update MODEL_CONFIG with advanced options
+MODEL_CONFIG.update(ADVANCED_MODEL_CONFIG)
 
 # Function to check if model is already downloaded/cached
 def is_model_cached(model_name):

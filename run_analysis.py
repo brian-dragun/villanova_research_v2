@@ -58,6 +58,18 @@ def list_available_analyses():
         "evaluate": {
             "module": "llm_evaluate_models",
             "description": "Evaluate model performance on benchmark tasks"
+        },
+        "super-weights": {
+            "module": "llm_super_weights",
+            "description": "Perform super-weights analysis"
+        },
+        "compare-sensitivity": {
+            "module": "llm_analyze_sensitivity",
+            "description": "Compare sensitivity across models"
+        },
+        "targeted-perturbation": {
+            "module": "llm_super_weights",
+            "description": "Run targeted perturbation analysis"
         }
     }
     
@@ -87,6 +99,16 @@ def main():
                         help='List available analysis types')
     parser.add_argument('--skip-finetune', action='store_true',
                         help='Skip fine-tuning if model directory does not exist')
+    parser.add_argument('--method', type=str, default=None,
+                        help='Method to use for analysis (e.g., gradient, z_score, hessian, integrated)')
+    parser.add_argument('--methods', type=str, default=None,
+                        help='Comma-separated list of methods for comparison analyses')
+    parser.add_argument('--threshold', type=float, default=0.7,
+                        help='Sensitivity threshold for super weight identification (0.0-1.0)')
+    parser.add_argument('--use-cache', action='store_true',
+                        help='Use cached results when available to speed up analysis')
+    parser.add_argument('--parallel', action='store_true', default=True,
+                        help='Use parallel processing for large models')
     
     args = parser.parse_args()
     
@@ -106,7 +128,10 @@ def main():
         "adversarial": "llm_adversarial_test",
         "bit-level": "llm_bit_level_and_ablation_analysis",
         "integrated": "llm_integrated_analysis",
-        "evaluate": "llm_evaluate_models"
+        "evaluate": "llm_evaluate_models",
+        "super-weights": "llm_super_weights",
+        "compare-sensitivity": "llm_analyze_sensitivity",
+        "targeted-perturbation": "llm_super_weights"
     }
     
     if args.analysis not in analyses:
@@ -148,23 +173,48 @@ def main():
             sig = inspect.signature(analysis_module.main)
             param_names = list(sig.parameters.keys())
             
-            # Call with appropriate parameters based on signature
-            if "model_name" in param_names and "output_dir" in param_names:
-                analysis_module.main(model_name=args.model, output_dir=args.output_dir)
-            elif "output_dir" in param_names:
-                analysis_module.main(output_dir=args.output_dir)
-            elif len(param_names) == 0:
+            # Prepare keyword arguments based on what's available
+            kwargs = {}
+            if "model_name" in param_names:
+                kwargs["model_name"] = args.model
+            if "output_dir" in param_names:
+                kwargs["output_dir"] = args.output_dir
+            if "method" in param_names and args.method is not None:
+                kwargs["method"] = args.method
+            if "methods" in param_names and args.methods is not None:
+                kwargs["methods"] = args.methods
+            if "threshold" in param_names and args.threshold is not None:
+                kwargs["threshold"] = args.threshold
+            if "use_cache" in param_names:
+                kwargs["use_cache"] = args.use_cache
+            if "parallel" in param_names:
+                kwargs["parallel"] = args.parallel
+            
+            # Call the main function with appropriate parameters
+            if kwargs:
+                analysis_module.main(**kwargs)
+            else:
                 # Just call the main function without parameters
                 analysis_module.main()
-            else:
-                # Try to call with output_dir anyway as it's a common parameter
-                try:
-                    analysis_module.main(output_dir=args.output_dir)
-                except TypeError:
-                    print("\n⚠️ Could not pass output_dir to main function. Results may not be saved.")
-                    analysis_module.main()
         elif hasattr(analysis_module, "run_analysis"):
-            analysis_module.run_analysis(model_name=args.model, output_dir=args.output_dir)
+            # Prepare kwargs for run_analysis
+            kwargs = {
+                "model_name": args.model,
+                "output_dir": args.output_dir
+            }
+            
+            # Add optional parameters if they're provided
+            if args.method is not None:
+                kwargs["method"] = args.method
+            if args.methods is not None:
+                kwargs["methods"] = args.methods
+            if args.threshold is not None:
+                kwargs["threshold"] = args.threshold
+            kwargs["use_cache"] = args.use_cache
+            kwargs["parallel"] = args.parallel
+                
+            # Call run_analysis with the kwargs
+            analysis_module.run_analysis(**kwargs)
         else:
             print(f"\n⚠️ Could not find main() or run_analysis() in {module_name}")
             print("Running the module directly instead...")

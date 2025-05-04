@@ -178,3 +178,4 @@ __pycache__/
 .DS_Store
 data/
 model_cache/
+outputs/
