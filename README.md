@@ -174,198 +174,212 @@ The framework supports several analysis types:
 
 1. **sensitivity**: Analyze weight sensitivity through layer ablation
    - Identifies critical weights by zeroing out layers and measuring perplexity changes
+   - **Expected Output**: Perplexity scores for each layer when ablated, sensitivity maps showing which layers affect performance most, and performance degradation metrics
+   - **Output Example**: `Layer transformer.h.8 shows highest sensitivity with 124% perplexity increase when ablated`
 
 2. **pruning**: Prune model weights to create smaller models
    - Removes less important weights based on sensitivity analysis
    - Creates pruned model files in the data directory
+   - **Expected Output**: Pruned model stats including size reduction (e.g., "Model size reduced by 43%"), inference speed improvement, and quality/performance trade-offs
+   - **Output Example**: `Pruned model (80% threshold): 23MB (43% smaller), 1.4x faster inference, perplexity increased by 15%`
 
 3. **robustness**: Test model robustness under various conditions
    - Adds controlled noise to weights and measures performance impact
    - Evaluates model stability under perturbations
+   - **Expected Output**: Graphs showing performance vs. noise level, critical noise thresholds where model breaks down, and layer-wise robustness rankings
+   - **Output Example**: `Model maintains 90% performance up to noise level 0.05; attention layers most sensitive to perturbation`
 
 4. **adversarial**: Run adversarial attacks against the model
    - Tests model response to carefully crafted inputs designed to mislead
+   - **Expected Output**: Success rates of different attack types, examples of successful adversarial inputs, and recommendations for improving model resilience
+   - **Output Example**: `Token substitution attack success rate: 73%; Character-level attack success rate: 41%; Most vulnerable topic: finance`
 
 5. **bit-level**: Perform bit-level and ablation analysis
    - Examines impact of bit flips in weights on model performance
    - Useful for studying quantization effects
+   - **Expected Output**: Bit sensitivity maps showing which bit positions are most critical, sensitivity rankings by parameter type, and quantization recommendations
+   - **Output Example**: `Sign bit flips in attention layers cause 87% performance drop; least significant 3 bits can be pruned with <5% quality impact`
 
 6. **integrated**: Run comprehensive integrated analysis
    - Combines multiple analysis types for a complete evaluation
+   - **Expected Output**: Consolidated results from all analysis types, cross-analysis correlations, and an executive summary of model strengths/weaknesses
+   - **Output Example**: `Critical components: layers 4-7 attention matrices, vocabulary embeddings for common tokens, highest bit sensitivity in feed-forward networks`
 
 7. **evaluate**: Evaluate model performance on benchmark tasks
    - Measures standard metrics for comparing models
+   - **Expected Output**: Performance metrics (perplexity, accuracy, BLEU, etc.) on standard datasets, comparison with baseline models, and performance breakdown by task type
+   - **Output Example**: `WikiText perplexity: 32.4, GLUE avg: 0.67, generation quality score: 7.3/10`
 
 8. **super-weights**: Identify and analyze critical weights
    - Uses gradient or Hessian-based methods to find "super weights"
    - Supports multiple identification methods: gradient, z_score, hessian, integrated
+   - **Expected Output**: Lists of super weights by layer, distribution analysis of super weight locations, and impact assessment when these weights are modified
+   - **Output Example**: `Identified 217 super weights (0.003% of total); 68% located in attention layers; top 10 weights are in vocabulary embeddings`
 
 9. **compare-sensitivity**: Compare different sensitivity methods
    - Evaluates gradient, ablation, z-score, and integrated gradients methods
    - Measures agreement between methods using Jaccard similarity
    - Compares computational efficiency and execution time
+   - **Expected Output**: Similarity matrices between methods, execution time comparisons, and agreement analysis on super weight identification
+   - **Output Example**: `Gradient and z-score methods show 76% agreement; Hessian method 4.3x slower but identifies 12% more critical weights`
 
 10. **targeted-perturbation**: Test robustness by perturbing only super weights
     - Focuses on the most critical weights for targeted analysis
     - Creates impact visualization showing relationship between % weights perturbed and performance degradation
+    - **Expected Output**: Performance degradation curves, comparison between targeted vs. random perturbation, and critical perturbation thresholds
+    - **Output Example**: `Perturbing 0.01% of super weights causes same degradation as random perturbation of 5% weights; model breaks at 30% super weight noise`
 
 11. **selective-weight-pruning**: Targeted pruning based on sensitivity analysis
     - Allows pruning specific layers or components using various sensitivity methods
     - Evaluates performance changes post-pruning
-
-## 🤖 Working with Models
-
-### Available Models
-
-The framework supports various models defined in `config.py`, including:
-
-- **Llama**: `llama-2-7b`, `llama-2-7b-chat`
-- **GPT-Neo/J**: `gpt-neo-125m`, `gpt-neo-1.3b`, `gpt-j-6b`
-- **OPT**: `opt-350m`, `opt-1.3b`
-- **BLOOM**: `bloom-560m`, `bloom-1b1`
-- **Pythia**: `pythia-70m`, `pythia-410m`
-- **Falcon**: `falcon-rw-1b`
-- **Mistral**: `mistral-7b`
-
-### Model Storage
-
-Models are stored in several locations:
-
-- `model_cache/`: Downloaded pre-trained models from Hugging Face
-- `data/gpu_llm_finetuned_*`: Fine-tuned model versions
-- `data/gpu_llm_pruned_*.pth`: Pruned model versions
-- `data/gpu_llm_noisy_*.pth`: Noisy model versions for robustness testing
-
-The system automatically uses cached models when available to avoid re-downloading.
+    - **Expected Output**: Output comparison between original and pruned models, performance metrics, and generated text examples showing behavior changes
+    - **Output Example**: As shown in the example above comparing original and pruned model outputs
 
 ## 📈 Results Interpretation
 
 Analysis results are saved to the `outputs/` directory with the following structure:
 
 - `outputs/ANALYSIS_TYPE_MODEL_NAME_TIMESTAMP/`
-  - `ablation_results.json`: Raw numerical results
-  - `ablation_results.png`: Visualization of perplexity changes
-  - `analysis_report.txt`: Human-readable report explaining results
-  - `sensitivity_map.png`: Heatmap showing sensitivity across model layers
-  - `super_weights.json`: Identified super-weights with sensitivity scores
-  - `perturbation_impact.png`: Graph showing impact of perturbing super weights
-  - `method_similarity.png`: Similarity matrix comparing sensitivity methods
+  - `ablation_results.json`: Raw numerical results showing perplexity changes when layers are ablated
+  - `ablation_results.png`: Visualization of perplexity changes across different layers
+  - `analysis_report.txt`: Human-readable report explaining results and key findings
+  - `sensitivity_map.png`: Heatmap showing sensitivity across model layers and components
+  - `super_weights.json`: Identified super-weights with sensitivity scores and locations
+  - `perturbation_impact.png`: Graph showing impact of perturbing super weights vs random weights
+  - `method_similarity.png`: Similarity matrix comparing different sensitivity methods
+  - `pruning_comparison.txt`: Performance metrics before and after different levels of pruning
+  - `robustness_curve.png`: Visual representation of model performance under increasing noise
+  - `bit_sensitivity.json`: Data showing impact of bit-level modifications on performance
+  - `adversarial_examples.txt`: Examples of inputs that successfully fool the model
+  - `model_output_samples.txt`: Sample outputs from original and modified models
 
-For selective weight pruning analysis, the results include:
-- `output_comparison.txt`: Shows the comparison between original and pruned model outputs
-- Visualizations of how pruning affects specific layers
-- Performance metrics before and after pruning
+### Expected Output Patterns by Analysis Type
 
-### Expected Output from Selective Weight Pruning
+#### Sensitivity Analysis
+The output will show which layers and components are most critical to model performance. Look for:
+- Perplexity increases when specific layers are ablated
+- Heat maps highlighting sensitive components
+- Lists of weights ranked by sensitivity score
 
-When running selective weight pruning commands, you can expect significant changes in model output behavior. For example, pruning the GPT-Neo-125m model shows:
-
-**Original model** tends to repeat phrases and struggle with the actual question, producing text like:
 ```
-In a galaxy far and away, in the far-west, far away you can see the galaxies in the far-west, far away. This is a great movie, and you can really see the galaxy in the far-west at the same time.
-```
-
-**Pruned model** produces dramatically different output with a more article-like structure:
-```
-(Image: Getty)
-
-By
-
-Michael A.
-
-When you first get hooked on the genre, it's easy to see why. The movie industry is still largely unknown...
+Layer sensitivity ranking:
+1. transformer.h.8 (124% perplexity increase)
+2. transformer.h.4 (98% perplexity increase)
+3. transformer.wte (word embeddings) (87% perplexity increase)
+...
 ```
 
-These differences highlight how selective pruning can fundamentally alter the model's generation patterns, which is valuable for understanding the role specific weights play in different aspects of text generation.
+#### Super-Weights Analysis
+You'll receive detailed information about the most critical weights in the model:
+- Their locations within the model architecture
+- Their relative importance scores
+- Visualizations showing their distribution across layers
+- The impact on performance when these weights are modified
 
-For super-weights analysis, the results include:
-- Lists of the most sensitive weights per layer
-- Layer-wise sensitivity distribution
-- Perturbation impact analysis
-- Performance degradation curves
+Example output will include something like:
+```
+Super weight analysis complete. Found 217 super weights out of 125M parameters (0.00017%).
+Distribution by layer type:
+- Attention layers: 68%
+- Feed-forward networks: 23%
+- Embeddings: 9%
 
-## 🔧 Advanced Research Usage
-
-### Super Weight Identification Methods
-
-```python
-# In llm_super_weights.py
-# Gradient-based sensitivity
-sensitivity_data = compute_gradient_sensitivity(model, tokenizer, prompt)
-
-# Hessian-based sensitivity
-sensitivity_data = compute_hessian_sensitivity(model, tokenizer, prompt)
-
-# Integrated gradients
-sensitivity_data = compute_integrated_gradients(model, tokenizer, prompt)
-
-# Z-score statistical outliers
-super_weights, layer_summary = identify_super_weights(model, z_threshold=2.5)
+Top 5 super weights:
+1. transformer.wte.weight[4242] - Sensitivity: 0.87
+2. transformer.h.8.attn.c_attn.weight[512,768] - Sensitivity: 0.83
+3. transformer.h.4.mlp.c_proj.weight[2048,768] - Sensitivity: 0.79
+...
 ```
 
-### Comparing Sensitivity Methods
+#### Robustness Testing
+The output will show how the model performs under various perturbations:
+- Performance degradation curves showing model quality vs noise level
+- Critical thresholds where performance significantly drops
+- Comparison of different noise types (Gaussian, uniform, targeted)
+- Layer-wise robustness rankings
 
-```python
-# Run comparative analysis between methods
-results = compare_sensitivity_methods(
-    model=model,
-    tokenizer=tokenizer,
-    prompt="What is machine learning?",
-    output_dir="./outputs/comparison",
-    methods=["gradient", "z_score", "integrated"]
-)
+Example terminal output:
+```
+Robustness test complete.
+- Model maintains >90% performance up to noise level σ=0.05
+- Performance cliff at noise level σ=0.08 (drops to 42%)
+- Most robust component: Feed-forward projection matrices
+- Most sensitive component: Attention query matrices
 ```
 
-### Targeted Perturbation Testing
+#### Comparative Analysis
+When comparing different sensitivity methods, expect:
+- Similarity matrices showing agreement between methods
+- Execution time comparisons
+- Analysis of which methods identify which super weights
+- Recommendations on which method to use for your specific needs
 
-```python
-# Test impact of perturbing super weights
-results = ablation_sensitivity_test(
-    model=model,
-    tokenizer=tokenizer,
-    sensitivity_data=sensitivity_data,
-    prompt="What is machine learning?",
-    output_dir="./outputs/perturbation"
-)
+Generated output will include summaries like:
+```
+Method comparison results:
+- Jaccard similarity scores:
+  * Gradient vs Z-score: 0.76
+  * Gradient vs Hessian: 0.65
+  * Z-score vs Hessian: 0.59
+  
+- Execution times:
+  * Gradient: 45.3s
+  * Z-score: 12.7s
+  * Hessian: 193.8s
+  
+- Super weight agreement:
+  * All methods agree on 42% of weights
+  * 18% uniquely identified by Hessian method
 ```
 
-### Extending with Custom Sensitivity Metrics
+#### Pruning Analysis
+After running pruning commands, expect:
+- Model size comparisons before and after pruning
+- Performance metrics on benchmark tasks
+- Inference speed improvements
+- Sample outputs comparing original and pruned models
 
-Create new sensitivity metrics by adding methods to the `llm_super_weights.py` file:
-
-```python
-# Example of implementing a new sensitivity metric
-def custom_sensitivity_metric(model, tokenizer, dataset):
-    # Implementation here
-    pass
+For example:
+```
+Pruning complete:
+- Original model size: 498MB
+- Pruned model size: 214MB (57% reduction)
+- Inference speedup: 2.3x
+- Performance impact:
+  * WikiText perplexity: +15%
+  * GLUE score: -8%
+  * Generation coherence: -11%
 ```
 
-## 📊 Visualization Examples
+#### Selective Weight Pruning
+As shown in the earlier example, you'll see significant differences in model behavior:
+- The original model may show repetitive patterns or specific quirks
+- The pruned model typically exhibits different generation style and content
+- Performance metrics will quantify the changes
+- Visualizations will show which components were most affected
 
-The framework generates various visualizations to help interpret results:
+In addition to text comparison examples, you'll also see metrics like:
+```
+Selective pruning of attention value components (80th percentile):
+- Weights zeroed: 27,648 (20% of target components)
+- Overall model size impact: 0.53% reduction
+- Perplexity change: +17.3%
+- Generation diversity: +43% (measured by unique n-grams)
+- Topic coherence: -12%
+```
 
-- **Layer-wise Sensitivity Distribution**: Bar chart showing which layers contain the most super weights
-- **Perturbation Impact Curve**: Line chart showing how model performance degrades as more super weights are perturbed
-- **Method Similarity Matrix**: Heatmap showing the Jaccard similarity between different sensitivity methods
-- **Execution Time Comparison**: Bar chart comparing the computational efficiency of different methods
+#### Bit-Level Analysis
+This analysis shows how bit-level changes affect model performance:
+- Bit position sensitivity rankings
+- Critical bits that cause model failure when flipped
+- Quantization potential analysis
+- Hardware fault simulation results
 
-## 🧪 Troubleshooting
-
-- **CUDA out of memory**: Use a smaller model or enable 8-bit quantization in `config.py`
-- **Authentication errors**: Ensure your HF token is correctly set in `.env`
-- **Module not found**: Check that all dependencies are installed via `pip install -r requirements.txt`
-- **Model not found errors**: Make sure to use the correct model name format with dashes (e.g., "gpt-neo-125m" not "gptneo125m")
-
-## 📝 Research Citations
-
-When using this framework in research publications, please cite:
-
-[Your citation information here]
-
-## 📄 License
-
-[Include license information here]
-
-## 🙏 Acknowledgments
-
-[Include acknowledgments here]
+Example output:
+```
+Bit-level sensitivity analysis:
+- Sign bit flips cause 87% average performance drop
+- Most significant 8 bits are critical (>50% performance impact when modified)
+- Bits 0-3 (least significant) can be truncated with <5% quality impact
+- Quantization recommendation: 8-bit quantization safe for most layers
+```
