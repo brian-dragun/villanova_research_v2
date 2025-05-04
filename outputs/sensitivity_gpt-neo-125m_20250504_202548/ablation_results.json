@@ -1,0 +1,7 @@
+{
+  "model_name": "EleutherAI/gpt-neo-125m",
+  "baseline_perplexity": 61.49551192076907,
+  "ablation_results": {
+    "transformer.h.0.mlp.c_fc.weight": 235825.57034541265
+  }
+}

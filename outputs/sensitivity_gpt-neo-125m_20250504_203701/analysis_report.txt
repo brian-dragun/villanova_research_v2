@@ -1,0 +1,13 @@
+SENSITIVITY ANALYSIS REPORT
+========================
+
+Model: EleutherAI/gpt-neo-125m
+Date: Sun May  4 20:37:10 UTC 2025
+
+Baseline perplexity: 61.50
+
+LAYER ABLATION RESULTS:
+- Layer: transformer.h.0.mlp.c_fc.weight
+  Perplexity after ablation: 235825.57
+  Impact: 3834.84x increase in perplexity
+

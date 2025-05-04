@@ -1,0 +1,7 @@
+{
+  "model_name": "meta-llama/Llama-2-7b-hf",
+  "baseline_perplexity": 11.434831643584852,
+  "ablation_results": {
+    "model.layers.0.mlp.gate_proj.weight": 258.59325072944284
+  }
+}

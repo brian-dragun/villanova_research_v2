@@ -1,0 +1,13 @@
+SENSITIVITY ANALYSIS REPORT
+========================
+
+Model: meta-llama/Llama-2-7b-hf
+Date: Sun May  4 20:42:43 UTC 2025
+
+Baseline perplexity: 11.43
+
+LAYER ABLATION RESULTS:
+- Layer: model.layers.0.mlp.gate_proj.weight
+  Perplexity after ablation: 258.59
+  Impact: 22.61x increase in perplexity
+
