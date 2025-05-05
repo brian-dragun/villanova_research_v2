@@ -92,6 +92,10 @@ pip install -r requirements.txt
 pip uninstall -y numpy
 pip install 'numpy<2.0'
 
+# Download required NLTK data
+echo -e "${YELLOW}Downloading required NLTK data files...${NC}"
+python -m nltk.downloader punkt wordnet omw-1.4
+
 # Special handling for bitsandbytes
 echo -e "${YELLOW}Ensuring bitsandbytes is properly configured...${NC}"
 pip uninstall -y bitsandbytes

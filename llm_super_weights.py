@@ -682,6 +682,7 @@ def main(model_name=None, output_dir=None, method="gradient", threshold=0.7, par
             if "quantization_config" in model_config:
                 model_config.pop("quantization_config")
                 
+            from transformers import AutoModelForCausalLM  # Ensure we have the import here
             model = AutoModelForCausalLM.from_pretrained(model_name, **model_config)
             tokenizer = AutoTokenizer.from_pretrained(model_name, **model_config)
             
