@@ -232,7 +232,6 @@ def main():
     if args.cpu_only:
         print("\n⚠️ Using CPU-only mode for model loading and inference")
         os.environ["CUDA_VISIBLE_DEVICES"] = ""
-        os.environ["BNB_FORCE_CPU"] = "1"
         os.environ["USE_CPU_ONLY"] = "1"
     
     print(f"\n🚀 Running {args.analysis} analysis on model: {args.model}")

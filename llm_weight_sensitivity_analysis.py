@@ -4,7 +4,7 @@ import os
 import json
 import matplotlib.pyplot as plt
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from config import MODEL_NAME, TEST_PROMPT, get_model_by_key, MODEL_CONFIG, is_model_cached
+from config import MODEL_NAME, TEST_PROMPT, get_model_by_key, get_model_config, is_model_cached
 
 def evaluate_perplexity(model, tokenizer, prompt):
     model.eval()
@@ -81,7 +81,7 @@ def save_results_to_file(output_dir, model_name, baseline, ablation_results):
     print(f"- Full report: {os.path.join(output_dir, 'analysis_report.txt')}")
     print(f"- Visualization: {os.path.join(output_dir, 'ablation_results.png')}")
 
-def main(output_dir=None):
+def main(model_name=None, output_dir=None, cpu_only=False):
     # Check if model specified in environment or use default
     model_key = os.environ.get("MODEL_NAME", None)
     if model_key:
@@ -93,7 +93,7 @@ def main(output_dir=None):
     
     print(f"\n📋 SENSITIVITY ANALYSIS")
     print(f"=======================")
-    print(f"�� Model key: {model_key}")
+    print(f"🔑 Model key: {model_key}")
     print(f"🔄 Full model path: {model_name}")
     
     # Check if the model exists locally
@@ -105,15 +105,36 @@ def main(output_dir=None):
 
     print(f"\n⏳ Loading model, please wait...")
     
-    # Use model configuration with local cache
-    model_config = MODEL_CONFIG.copy()
+    # Use model-specific configuration with local cache
+    from config import DEFAULT_MODEL_KEY
+    model_config = get_model_config(model_key if model_key else DEFAULT_MODEL_KEY)
+    
+    # Check for CPU-only mode from either function parameter or environment variable
+    cpu_only = cpu_only or os.environ.get("USE_CPU_ONLY", "0") == "1"
+    
+    if cpu_only:
+        print("⚠️ Using CPU-only mode (no CUDA acceleration)")
+        # Remove GPU-specific options for CPU-only mode
+        for key in ["device_map", "torch_dtype", "use_flash_attention", 
+                   "use_flash_attention_2", "use_flash_attn", "use_memory_efficient_attention"]:
+            if key in model_config:
+                del model_config[key]
+        
+        # Force CPU device
+        device = torch.device("cpu")
+    else:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"🖥️ Using device: {device}")
+        
+        if device.type == "cuda":
+            # Print GPU information
+            gpu_props = torch.cuda.get_device_properties(device)
+            print(f"🔥 GPU: {gpu_props.name} with {gpu_props.total_memory / (1024**3):.2f} GB memory")
     
     # Load model and tokenizer
     try:
         model = AutoModelForCausalLM.from_pretrained(model_name, **model_config)
         tokenizer = AutoTokenizer.from_pretrained(model_name, **model_config)
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        print(f"🖥️ Using device: {device}")
         model.to(device)
     except Exception as e:
         print(f"❌ Error loading model: {e}")

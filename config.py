@@ -25,88 +25,87 @@ if env_path.exists():
 
 # Available models configuration
 AVAILABLE_MODELS = {
-    # Llama models
+    # Llama models (larger models, may require more GPU memory)
     "llama-2-7b": {
         "name": "meta-llama/Llama-2-7b-hf",
         "requires_auth": True,
-        "details": "7B parameter base Llama model"
+        "details": "7B parameter base Llama model (needs >14GB GPU VRAM)",
+        "supports_flash_attn": True
     },
     "llama-2-7b-chat": {
         "name": "meta-llama/Llama-2-7b-chat-hf",
         "requires_auth": True,
-        "details": "7B parameter chat-tuned Llama model"
+        "details": "7B parameter chat-tuned Llama model (needs >14GB GPU VRAM)",
+        "supports_flash_attn": True
     },
     
-    # GPT-Neo/GPT-J models
-    "gpt-neo-125m": {
-        "name": "EleutherAI/gpt-neo-125m",
-        "requires_auth": False,
-        "details": "125M parameter model, good for quick testing"
-    },
+    # Mid-sized models (good balance of performance and memory usage)
     "gpt-neo-1.3b": {
         "name": "EleutherAI/gpt-neo-1.3B",
         "requires_auth": False,
-        "details": "1.3B parameter model"
+        "details": "1.3B parameter model (needs ~3GB GPU VRAM)",
+        "supports_flash_attn": False
     },
     "gpt-j-6b": {
         "name": "EleutherAI/gpt-j-6B",
         "requires_auth": False,
-        "details": "6B parameter model"
-    },
-    
-    # OPT models
-    "opt-350m": {
-        "name": "facebook/opt-350m",
-        "requires_auth": False,
-        "details": "350M parameter OPT model"
+        "details": "6B parameter model (needs ~12GB GPU VRAM)",
+        "supports_flash_attn": False
     },
     "opt-1.3b": {
         "name": "facebook/opt-1.3b",
         "requires_auth": False,
-        "details": "1.3B parameter OPT model"
+        "details": "1.3B parameter OPT model (needs ~3GB GPU VRAM)",
+        "supports_flash_attn": False
+    },
+    "mistral-7b": {
+        "name": "mistralai/Mistral-7B-v0.1",
+        "requires_auth": False,
+        "details": "7B parameter Mistral model (needs >14GB GPU VRAM)",
+        "supports_flash_attn": True
     },
     
-    # BLOOM models
-    "bloom-560m": {
-        "name": "bigscience/bloom-560m",
+    # Smaller models (excellent for testing and lower-end GPUs)
+    "gpt-neo-125m": {
+        "name": "EleutherAI/gpt-neo-125m",
         "requires_auth": False,
-        "details": "560M parameter BLOOM model"
+        "details": "125M parameter model, ideal for quick testing (needs ~1GB GPU VRAM)",
+        "supports_flash_attn": False
     },
-    "bloom-1b1": {
-        "name": "bigscience/bloom-1b1",
-        "requires_auth": False,
-        "details": "1.1B parameter BLOOM model"
-    },
-    
-    # Pythia models
     "pythia-70m": {
         "name": "EleutherAI/pythia-70m",
         "requires_auth": False,
-        "details": "70M parameter model, very small"
+        "details": "70M parameter model, very small (needs <1GB GPU VRAM)",
+        "supports_flash_attn": False
     },
     "pythia-410m": {
         "name": "EleutherAI/pythia-410m",
         "requires_auth": False,
-        "details": "410M parameter model"
+        "details": "410M parameter model (needs ~1-2GB GPU VRAM)",
+        "supports_flash_attn": False
     },
-    
-    # Falcon models
+    "bloom-560m": {
+        "name": "bigscience/bloom-560m",
+        "requires_auth": False,
+        "details": "560M parameter BLOOM model (needs ~1-2GB GPU VRAM)",
+        "supports_flash_attn": False
+    },
+    "opt-350m": {
+        "name": "facebook/opt-350m",
+        "requires_auth": False,
+        "details": "350M parameter OPT model (needs ~1GB GPU VRAM)",
+        "supports_flash_attn": False
+    },
     "falcon-rw-1b": {
         "name": "tiiuae/falcon-rw-1b",
         "requires_auth": False,
-        "details": "1B parameter Falcon model"
+        "details": "1B parameter Falcon model (needs ~2GB GPU VRAM)",
+        "supports_flash_attn": False
     },
-    
-    # Mistral models
-    "mistral-7b": {
-        "name": "mistralai/Mistral-7B-v0.1",
-        "requires_auth": False,
-        "details": "7B parameter Mistral model"
-    }
 }
 
-# Default model selection
-DEFAULT_MODEL_KEY = "llama-2-7b"  # Changed default to Llama
+# Default model selection - using a smaller model that works well on most GPUs
+DEFAULT_MODEL_KEY = "gpt-neo-125m"  # Changed default to a GPU-friendly model
 MODEL_NAME = AVAILABLE_MODELS[DEFAULT_MODEL_KEY]["name"]
 
 # Function to get model name from key
@@ -115,6 +114,14 @@ def get_model_by_key(model_key):
     if model_key in AVAILABLE_MODELS:
         return AVAILABLE_MODELS[model_key]["name"]
     return model_key  # Return as-is if not found (assuming it's a full path)
+
+# Function to check if a model supports flash attention
+def model_supports_flash_attn(model_key):
+    """Check if a model supports flash attention."""
+    if model_key in AVAILABLE_MODELS:
+        return AVAILABLE_MODELS[model_key].get("supports_flash_attn", False)
+    # Default to False for unknown models
+    return False
 
 # Function to generate model paths based on model name
 def get_model_paths(model_name):
@@ -135,25 +142,29 @@ def get_model_paths(model_name):
 # Paths for model variants - using the default model initially
 MODEL_PATHS = get_model_paths(MODEL_NAME)
 
-# Model loading configuration
+# Base GPU-optimized model loading configuration
 MODEL_CONFIG = {
     "use_auth_token": HF_TOKEN,
     "trust_remote_code": True,
     "device_map": "auto",  # Automatically distribute model across available GPUs
-    "load_in_8bit": True,  # Enable 8-bit quantization for memory efficiency
     "cache_dir": CACHE_DIR,  # Use local cache
     "torch_dtype": "auto",  # Automatically use the most memory-efficient precision
+    "low_cpu_mem_usage": True,  # Reduce CPU memory usage during loading
 }
 
-# Advanced model configuration
-ADVANCED_MODEL_CONFIG = {
-    "use_flash_attention": True,    # Use flash attention for faster transformer operations
-    "use_memory_efficient_attention": True,  # More memory efficient attention implementation
-    "low_cpu_mem_usage": True,      # Reduce CPU memory usage during loading
-}
-
-# Update MODEL_CONFIG with advanced options
-MODEL_CONFIG.update(ADVANCED_MODEL_CONFIG)
+# Get model config with appropriate settings based on model key
+def get_model_config(model_key):
+    """Get appropriate model configuration based on model key."""
+    config = MODEL_CONFIG.copy()
+    
+    # Add flash attention for supported models only
+    if model_supports_flash_attn(model_key):
+        config.update({
+            "use_flash_attention": True,
+            "use_memory_efficient_attention": True,
+        })
+    
+    return config
 
 # Function to check if model is already downloaded/cached
 def is_model_cached(model_name):

@@ -121,6 +121,44 @@ The setup script will:
 python run_analysis.py --model gpt-neo-125m --analysis sensitivity
 ```
 
+## 🔄 GPU Compatibility Guide
+
+### GPU-Compatible Models
+
+The framework is optimized for GPU acceleration using standard PyTorch (without 8-bit quantization). Here are the compatible models categorized by their memory requirements:
+
+#### Small Models (< 2GB VRAM)
+- `pythia-70m` (~70M parameters)
+- `gpt-neo-125m` (~125M parameters)
+- `opt-350m` (~350M parameters)
+- `pythia-410m` (~410M parameters)
+- `bloom-560m` (~560M parameters)
+
+#### Medium Models (2-5GB VRAM)
+- `falcon-rw-1b` (~1B parameters)
+- `gpt-neo-1.3b` (~1.3B parameters)
+- `opt-1.3b` (~1.3B parameters)
+
+#### Large Models (12-16GB VRAM)
+- `gpt-j-6b` (~6B parameters)
+- `llama-2-7b` (~7B parameters)
+- `llama-2-7b-chat` (~7B parameters)
+- `mistral-7b` (~7B parameters)
+
+Models with `supports_flash_attn: True` in the configuration (like Llama and Mistral) will automatically use Flash Attention for faster processing when available.
+
+### CPU vs. GPU Mode
+
+By default, the framework will use CUDA GPU acceleration if available. You can control this behavior with command-line options:
+
+```bash
+# Default: Uses GPU acceleration if available
+python run_analysis.py --model gpt-neo-125m --analysis sensitivity
+
+# Force CPU-only mode (slower but useful if GPU issues occur)
+python run_analysis.py --model gpt-neo-125m --analysis sensitivity --cpu-only
+```
+
 ## ⚙️ Available Commands
 
 ### Running Analyses
@@ -279,6 +317,9 @@ python run_analysis.py --analysis super-weights --no-parallel  # Disable
 
 # Use cached results when available
 python run_analysis.py --analysis super-weights --use-cache
+
+# Force CPU-only mode (no GPU acceleration)
+python run_analysis.py --analysis sensitivity --model gpt-neo-125m --cpu-only
 ```
 
 ## 📊 Analysis Types
