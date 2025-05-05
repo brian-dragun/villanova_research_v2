@@ -337,7 +337,20 @@ def ablation_sensitivity_test(model, tokenizer, sensitivity_data, prompt, output
         with torch.no_grad():
             inputs = tokenizer(prompt, return_tensors="pt").to(device)
             outputs = model(**inputs, labels=inputs["input_ids"])
-            return torch.exp(outputs.loss).item()
+            loss = outputs.loss.item()
+            
+            # Add safety check for large loss values to prevent overflow
+            if not math.isfinite(loss) or loss > 20:
+                print("⚠️ Warning: Extremely high loss detected. Capping perplexity.")
+                return 1e10  # Return a high but finite perplexity value
+                
+            perplexity = math.exp(loss)
+            
+            # Additional safety check for the resulting perplexity
+            if not math.isfinite(perplexity):
+                return 1e10
+                
+            return perplexity
     
     baseline_ppl = evaluate_perplexity()
     print(f"  Baseline perplexity: {baseline_ppl:.2f}")

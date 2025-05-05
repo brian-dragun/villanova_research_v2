@@ -8,7 +8,7 @@ import os
 import json
 import time
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from config import MODEL_NAME, TEST_PROMPT
+from config import MODEL_NAME, TEST_PROMPT, get_model_by_key
 from llm_super_weights import (
     compute_gradient_sensitivity,
     compute_hessian_sensitivity as compute_full_hessian_sensitivity,
@@ -302,6 +302,9 @@ def main(model_name=None, output_dir=None, methods=None):
     # Use default model if not specified
     if model_name is None:
         model_name = MODEL_NAME
+    else:
+        # Convert key to full model name if it's a short key
+        model_name = get_model_by_key(model_name)
     
     # Create output directory
     if output_dir is None:

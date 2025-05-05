@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import json
 import time
 import argparse
+import math
 from tqdm.auto import tqdm
 from collections import defaultdict, Counter
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -352,7 +353,19 @@ class SelectiveWeightPruner:
             inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
             with torch.no_grad():
                 outputs = self.model(**inputs, labels=inputs["input_ids"])
-                ppl_scores.append(torch.exp(outputs.loss).item())
+                
+                # Add safeguards for numerical stability
+                loss = outputs.loss.item()
+                if not math.isfinite(loss) or loss > 20:
+                    print(f"⚠️ Warning: Very high loss detected ({loss}). Capping perplexity.")
+                    ppl = 1e10  # Cap at a reasonable maximum value
+                else:
+                    ppl = math.exp(loss)
+                    # Additional check on the resulting perplexity
+                    if not math.isfinite(ppl) or ppl > 1e10:
+                        ppl = 1e10
+                        
+                ppl_scores.append(ppl)
         
         metrics["perplexity"] = sum(ppl_scores) / len(ppl_scores)
         

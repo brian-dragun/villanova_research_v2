@@ -82,7 +82,19 @@ def evaluate_generation_quality(model, tokenizer, prompts, max_tokens=100):
             response_inputs = tokenizer(response, return_tensors="pt").to(device)
             with torch.no_grad():
                 response_outputs = model(**response_inputs, labels=response_inputs["input_ids"])
-            response_ppl = torch.exp(response_outputs.loss).item() if hasattr(response_outputs, 'loss') else 100
+            
+            # Apply safeguards to prevent numerical overflow
+            if hasattr(response_outputs, 'loss'):
+                loss = response_outputs.loss.item()
+                if not math.isfinite(loss) or loss > 20:
+                    response_ppl = 100  # Cap at a reasonable value
+                else:
+                    response_ppl = math.exp(loss)
+                    if not math.isfinite(response_ppl):
+                        response_ppl = 100
+            else:
+                response_ppl = 100
+                
             # Lower perplexity is better, so we invert the scale 
             fluency_score = max(0, min(10, 10 * (1 / (0.1 * response_ppl))))
             fluency_scores.append(fluency_score)
@@ -118,7 +130,7 @@ def evaluate_model(model_path, dataset_split="validation", batch_size=4):
     Evaluates a language model by computing its perplexity on a dataset.
     
     Args:
-        model_path: Path to the model directory or weights file
+        model_path: Path to the model directory or weights file, or Hugging Face model identifier
         dataset_split: Which split of the dataset to use ("validation" or "test")
         batch_size: Batch size for evaluation (increase for faster eval if memory allows)
         
@@ -131,11 +143,15 @@ def evaluate_model(model_path, dataset_split="validation", batch_size=4):
     
     # Load model with error handling
     try:
-        if os.path.isdir(model_path):
-            logger.info(f"Loading model from directory: {model_path}")
+        # Check if model_path is a Hugging Face model identifier or a local path
+        if '/' in model_path and not os.path.exists(model_path):
+            logger.info(f"Loading model from Hugging Face: {model_path}")
             model = AutoModelForCausalLM.from_pretrained(model_path, trust_remote_code=True)
-        else:
-            logger.info(f"Loading base model {MODEL_NAME} and weights from: {model_path}")
+        elif os.path.isdir(model_path):
+            logger.info(f"Loading model from local directory: {model_path}")
+            model = AutoModelForCausalLM.from_pretrained(model_path, trust_remote_code=True)
+        elif os.path.isfile(model_path):
+            logger.info(f"Loading base model {MODEL_NAME} and weights from local file: {model_path}")
             model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, trust_remote_code=True)
             # Load with error handling for potentially different state dict formats
             try:
@@ -148,6 +164,14 @@ def evaluate_model(model_path, dataset_split="validation", batch_size=4):
                     model.load_state_dict(state_dict['model_state_dict'])
                 else:
                     model.load_state_dict(state_dict)
+        else:
+            # Assume it's a Hugging Face model ID without a slash
+            logger.info(f"Loading model from Hugging Face by ID: {model_path}")
+            try:
+                model = AutoModelForCausalLM.from_pretrained(f"EleutherAI/{model_path}", trust_remote_code=True)
+            except Exception as e:
+                logger.warning(f"Failed to load from EleutherAI namespace: {e}. Trying direct loading...")
+                model = AutoModelForCausalLM.from_pretrained(model_path, trust_remote_code=True)
     except Exception as e:
         logger.error(f"Failed to load model: {e}")
         raise
@@ -157,7 +181,18 @@ def evaluate_model(model_path, dataset_split="validation", batch_size=4):
     
     # Load tokenizer
     try:
-        tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
+        # Try to load tokenizer from the same source as the model
+        if '/' in model_path and not os.path.exists(model_path):
+            tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+        elif os.path.exists(model_path) and os.path.isdir(model_path):
+            tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+        elif model_path.startswith("EleutherAI/") or '/' not in model_path:
+            # For EleutherAI models or models without a namespace
+            model_id = model_path.split('/')[-1] if '/' in model_path else model_path
+            tokenizer = AutoTokenizer.from_pretrained(f"EleutherAI/{model_id}", trust_remote_code=True)
+        else:
+            tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
+            
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
     except Exception as e:
@@ -242,20 +277,184 @@ def evaluate_model(model_path, dataset_split="validation", batch_size=4):
         return None
 
     avg_loss = total_loss / total_tokens
-    perplexity = math.exp(avg_loss)
+    
+    # Add safeguards for numerical stability
+    if not math.isfinite(avg_loss) or avg_loss > 20:
+        logger.warning(f"Very high loss detected ({avg_loss}). Capping perplexity.")
+        perplexity = 1e10  # Return a high but finite perplexity
+    else:
+        perplexity = math.exp(avg_loss)
+        if not math.isfinite(perplexity) or perplexity > 1e10:
+            logger.warning("Perplexity overflow. Capping at 1e10.")
+            perplexity = 1e10
     
     elapsed = time.time() - start_time
     logger.info(f"Evaluation completed in {elapsed:.2f}s")
     print(f"✅ Perplexity of model at {model_path}: {perplexity:.2f}")
     return perplexity
 
+def run_analysis(model_name=MODEL_NAME, output_dir=None, **kwargs):
+    """
+    Standard entrypoint for integrated analysis pipeline.
+    Runs comprehensive model evaluation including perplexity and generation quality.
+    
+    Args:
+        model_name: Name or path of the model to evaluate
+        output_dir: Directory to save outputs
+        **kwargs: Additional arguments for customizing the analysis
+    
+    Returns:
+        Dictionary with evaluation results
+    """
+    import os
+    import json
+    from datasets import load_dataset
+    import nltk
+    
+    # Ensure output directory exists
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+    
+    results = {
+        "model_name": model_name,
+        "evaluation_type": "comprehensive"
+    }
+    
+    # Ensure NLTK data is available for tokenization and BLEU score calculation
+    try:
+        nltk.data.find('tokenizers/punkt')
+    except LookupError:
+        print("Downloading NLTK punkt tokenizer...")
+        nltk.download('punkt', quiet=True)
+        
+    # Download the punkt_tab resource specifically
+    try:
+        nltk.data.find('tokenizers/punkt_tab')
+    except LookupError:
+        print("Downloading NLTK punkt_tab tokenizer...")
+        # Download to the user's home directory to ensure write permissions
+        nltk.download('punkt', download_dir='/home/ubuntu/nltk_data', quiet=True)
+        
+    # Make another attempt with explicit download
+    try:
+        import nltk.tokenize
+        nltk.tokenize.word_tokenize("Test sentence")
+    except Exception as e:
+        print(f"Error with tokenizers: {e}. Downloading additional resources...")
+        nltk.download('punkt', download_dir='/home/ubuntu/nltk_data', quiet=True)
+        # Try to download using a different approach for punkt_tab
+        nltk.download('all', download_dir='/home/ubuntu/nltk_data', quiet=True)
+    
+    # 1. Calculate perplexity on standard dataset
+    print(f"📊 Calculating perplexity for {model_name}")
+    perplexity = evaluate_model(model_name, dataset_split=kwargs.get('dataset_split', 'validation'))
+    results['perplexity'] = perplexity
+    
+    # 2. Load model for generation quality tests
+    print(f"🤖 Loading model for generation quality evaluation")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    try:
+        # Use the same model loading logic as in evaluate_model
+        if '/' in model_name and not os.path.exists(model_name):
+            print(f"Loading model from Hugging Face: {model_name}")
+            model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True)
+            tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+        elif os.path.isdir(model_name):
+            print(f"Loading model from local directory: {model_name}")
+            model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True)
+            tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+        elif os.path.isfile(model_name):
+            print(f"Loading model weights from file: {model_name}")
+            model = AutoModelForCausalLM.from_pretrained(MODEL_NAME, trust_remote_code=True)
+            tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, trust_remote_code=True)
+            # Load weights
+            model.load_state_dict(torch.load(model_name, map_location=device))
+        else:
+            # Assume it's a Hugging Face model ID without a slash
+            print(f"Loading model from Hugging Face by ID: {model_name}")
+            try:
+                model = AutoModelForCausalLM.from_pretrained(f"EleutherAI/{model_name}", trust_remote_code=True)
+                tokenizer = AutoTokenizer.from_pretrained(f"EleutherAI/{model_name}", trust_remote_code=True)
+            except Exception as e:
+                print(f"Failed to load from EleutherAI namespace: {e}. Trying direct loading...")
+                model = AutoModelForCausalLM.from_pretrained(model_name, trust_remote_code=True)
+                tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+        
+        model = model.to(device)
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+    except Exception as e:
+        print(f"❌ Error loading model for generation tests: {str(e)}")
+        if output_dir:
+            with open(os.path.join(output_dir, "evaluation_results.json"), "w") as f:
+                json.dump(results, f, indent=2)
+        return results
+    
+    # 3. Prepare test prompts
+    prompts = [
+        "Explain the concept of machine learning in simple terms.",
+        "Write a short poem about artificial intelligence.",
+        "What are the ethical implications of autonomous vehicles?",
+        "Summarize the history of computing in three sentences.",
+        "If I have 5 apples and give away 2, how many do I have left?",
+        "Describe the process of photosynthesis briefly.",
+        "What's the difference between a virus and bacteria?",
+        "Translate 'Hello, how are you?' to French.",
+        "Write a function in Python to calculate the Fibonacci sequence.",
+        "Explain the concept of climate change and its impacts."
+    ]
+    
+    # Use additional prompts if provided
+    custom_prompts = kwargs.get('prompts', [])
+    if custom_prompts:
+        prompts.extend(custom_prompts)
+    
+    # 4. Evaluate generation quality
+    print(f"✨ Evaluating generation quality on {len(prompts)} prompts")
+    gen_results = evaluate_generation_quality(
+        model, 
+        tokenizer, 
+        prompts, 
+        max_tokens=kwargs.get('max_tokens', 100)
+    )
+    
+    results.update(gen_results)
+    
+    # 5. Save detailed results including generated text samples
+    if output_dir:
+        # Save summary results
+        with open(os.path.join(output_dir, "evaluation_results.json"), "w") as f:
+            # Convert any non-serializable values
+            serializable_results = {k: v for k, v in results.items() if k != 'generated_responses'}
+            json.dump(serializable_results, f, indent=2)
+            
+        # Save generated responses separately (can be large)
+        with open(os.path.join(output_dir, "generated_responses.txt"), "w") as f:
+            for i, (prompt, response) in enumerate(zip(prompts, results.get('generated_responses', []))):
+                f.write(f"PROMPT {i+1}: {prompt}\n")
+                f.write(f"RESPONSE: {response}\n")
+                f.write("-" * 80 + "\n")
+    
+    print(f"✅ Evaluation complete! Results summary:")
+    print(f"  • Perplexity: {results.get('perplexity', 'N/A')}")
+    print(f"  • Fluency score: {results.get('fluency_score', 0):.2f}/10")
+    print(f"  • Relevance score: {results.get('relevance_score', 0):.2f}/10")
+    print(f"  • Overall score: {results.get('overall_score', 0):.2f}/10")
+    
+    return results
+
 if __name__ == "__main__":
     # Get path from command line if provided
     import sys
     if len(sys.argv) > 1:
-        model_paths = sys.argv[1:]
-        for path in model_paths:
-            evaluate_model(path)
+        if sys.argv[1] == "--run-analysis":
+            # Support for direct invocation with new analysis pipeline
+            run_analysis(MODEL_NAME, "outputs/evaluate_" + MODEL_NAME.replace('/', '_'))
+        else:
+            model_paths = sys.argv[1:]
+            for path in model_paths:
+                evaluate_model(path)
     else:
         evaluate_model("data/gpu_llm_finetuned_llama27bhf")  # Loads from directory
         evaluate_model("data/gpu_llm_pruned_llama27bhf.pth")  # Loads from a file
