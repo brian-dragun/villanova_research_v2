@@ -121,6 +121,56 @@ The setup script will:
 python run_analysis.py --model gpt-neo-125m --analysis sensitivity
 ```
 
+## 📊 Research Dashboard
+
+The framework includes an interactive dashboard for managing and visualizing research outputs. The dashboard organizes outputs by date, model, and analysis type, making it easy to track experiments and compare results.
+
+### Dashboard Commands
+
+```bash
+# Generate or update the dashboard with latest results
+python manage_outputs.py dashboard
+
+# Open the dashboard in your default web browser
+python manage_outputs.py open-dashboard
+
+# List available outputs
+python manage_outputs.py list                        # List all outputs
+python manage_outputs.py list 7                      # List outputs from the last 7 days
+python manage_outputs.py list --model gpt-neo-125m   # Filter by model
+python manage_outputs.py list --analysis sensitivity # Filter by analysis type
+
+# Compare outputs from different runs
+python manage_outputs.py compare run1_dir run2_dir --files "*.txt" "*.json"
+
+# Clean up old outputs (default: older than 30 days)
+python manage_outputs.py clean 30
+```
+
+### Running the Dashboard Server
+
+To access the dashboard over the network (including from your local or public IP):
+
+```bash
+# Start the dashboard server in the background
+python dashboard_server.py --port 8080
+
+# Access via any of these URLs:
+# http://localhost:8080/         (from the same machine)
+# http://YOUR_LOCAL_IP:8080/     (from the local network)
+# http://YOUR_PUBLIC_IP:8080/    (from the internet, if your server has a public IP)
+
+# To run in the background and keep running after terminal closes
+nohup python dashboard_server.py --port 8080 > dashboard_server.log 2>&1 &
+```
+
+The dashboard provides:
+- Organized view of all research outputs
+- Filtering by date, model, and analysis type
+- Quick access to latest results
+- Ability to compare multiple runs
+- Direct links to output files and visualizations
+
 ## 🔄 GPU Compatibility Guide
 
 ### GPU-Compatible Models

@@ -5,6 +5,10 @@ import json
 import matplotlib.pyplot as plt
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from config import MODEL_NAME, TEST_PROMPT, get_model_by_key, get_model_config, is_model_cached
+from output_manager import OutputManager
+
+# Initialize output manager
+output_mgr = OutputManager()
 
 def evaluate_perplexity(model, tokenizer, prompt):
     model.eval()
@@ -38,9 +42,16 @@ def layer_ablation_experiment(model, tokenizer, prompt, layers_to_ablate):
     
     return baseline, results
 
-def save_results_to_file(output_dir, model_name, baseline, ablation_results):
+def save_results_to_file(model_name, baseline, ablation_results):
     """Save analysis results to files in the output directory"""
-    os.makedirs(output_dir, exist_ok=True)
+    # Get model name without path for cleaner output
+    model_name_simple = model_name.split('/')[-1] if '/' in model_name else model_name
+    
+    # Get output directory from output manager
+    output_dir = output_mgr.get_output_dir(
+        analysis_type="sensitivity",
+        model_name=model_name_simple
+    )
     
     # Save results as JSON
     result_data = {
@@ -54,15 +65,24 @@ def save_results_to_file(output_dir, model_name, baseline, ablation_results):
     
     # Create visualization
     plt.figure(figsize=(12, 6))
-    plt.bar(
-        ['Baseline'] + list(ablation_results.keys()), 
-        [baseline] + list(ablation_results.values())
-    )
+    
+    # Sort layers by impact (perplexity increase)
+    sorted_items = sorted(ablation_results.items(), key=lambda x: x[1], reverse=True)
+    layer_names = [name.split('.')[-2] + '.' + name.split('.')[-1] for name, _ in sorted_items]
+    perplexities = [ppl for _, ppl in sorted_items]
+    
+    # Plot bars
+    plt.bar(range(len(layer_names)), perplexities)
+    plt.axhline(y=baseline, color='r', linestyle='--', label=f'Baseline ({baseline:.2f})')
+    
     plt.ylabel('Perplexity (lower is better)')
-    plt.title(f'Layer Ablation Results for {model_name}')
-    plt.xticks(rotation=45, ha='right')
+    plt.xlabel('Layer')
+    plt.title(f'Layer Sensitivity Analysis: {model_name_simple}')
+    plt.xticks(range(len(layer_names)), layer_names, rotation=45, ha='right')
+    plt.legend()
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "ablation_results.png"))
+    plt.savefig(os.path.join(output_dir, "layer_sensitivity_plot.png"))
+    plt.close()
     
     # Save a report as text
     with open(os.path.join(output_dir, "analysis_report.txt"), "w") as f:
@@ -71,15 +91,17 @@ def save_results_to_file(output_dir, model_name, baseline, ablation_results):
         f.write(f"Model: {model_name}\n")
         f.write(f"Date: {os.popen('date').read().strip()}\n\n")
         f.write(f"Baseline perplexity: {baseline:.2f}\n\n")
-        f.write(f"LAYER ABLATION RESULTS:\n")
-        for layer, ppl in ablation_results.items():
+        f.write(f"LAYER ABLATION RESULTS (sorted by impact):\n")
+        for layer, ppl in sorted_items:
             f.write(f"- Layer: {layer}\n")
             f.write(f"  Perplexity after ablation: {ppl:.2f}\n")
             f.write(f"  Impact: {ppl/baseline:.2f}x increase in perplexity\n\n")
     
     print(f"\nResults saved to {output_dir}")
     print(f"- Full report: {os.path.join(output_dir, 'analysis_report.txt')}")
-    print(f"- Visualization: {os.path.join(output_dir, 'ablation_results.png')}")
+    print(f"- Visualization: {os.path.join(output_dir, 'layer_sensitivity_plot.png')}")
+    
+    return output_dir
 
 def main(model_name=None, output_dir=None, cpu_only=False):
     # Check if model specified in environment or use default
@@ -145,25 +167,41 @@ def main(model_name=None, output_dir=None, cpu_only=False):
     model_name_lower = model_name.lower()
     if "llama" in model_name_lower:
         print(f"\n🦙 Detected Llama model architecture")
-        layers_to_ablate = ["model.layers.0.mlp.gate_proj.weight"]
+        # Test multiple layers for better sensitivity analysis
+        layers_to_ablate = [
+            f"model.layers.{i}.mlp.gate_proj.weight" for i in range(min(5, model.config.num_hidden_layers))
+        ]
+        layers_to_ablate += [
+            f"model.layers.{i}.self_attn.q_proj.weight" for i in range(min(5, model.config.num_hidden_layers))
+        ]
     elif "gpt-j" in model_name_lower:
         print(f"\n🤖 Detected GPT-J model architecture")
-        layers_to_ablate = ["transformer.h.0.mlp.fc_in.weight"]
+        layers_to_ablate = [
+            f"transformer.h.{i}.mlp.fc_in.weight" for i in range(min(5, model.config.num_hidden_layers))
+        ]
+        layers_to_ablate += [
+            f"transformer.h.{i}.attn.q_proj.weight" for i in range(min(5, model.config.num_hidden_layers))
+        ]
     elif "gpt-neo" in model_name_lower:
         print(f"\n🤖 Detected GPT-Neo model architecture") 
-        layers_to_ablate = ["transformer.h.0.mlp.c_fc.weight"]
+        layers_to_ablate = [
+            f"transformer.h.{i}.mlp.c_fc.weight" for i in range(min(5, model.config.num_hidden_layers))
+        ]
+        layers_to_ablate += [
+            f"transformer.h.{i}.attn.attention.q_proj.weight" for i in range(min(5, model.config.num_hidden_layers))
+        ]
     else:
         # Generic approach
         print(f"\n⚠️ Unknown model architecture, using generic approach")
         # Print the first few parameter names to help with debugging
         param_names = list(model.named_parameters())[:5]
         print(f"Sample parameters: {[name for name, _ in param_names]}")
-        layers_to_ablate = [name for name, _ in param_names if "mlp" in name and "weight" in name][:1]
+        layers_to_ablate = [name for name, _ in param_names if "mlp" in name and "weight" in name][:5]
         if not layers_to_ablate:
             # Fallback to the first weight parameter
-            layers_to_ablate = [name for name, _ in param_names if "weight" in name][:1]
+            layers_to_ablate = [name for name, _ in param_names if "weight" in name][:5]
     
-    print(f"\n🔍 Testing sensitivity of layers: {layers_to_ablate}")
+    print(f"\n🔍 Testing sensitivity of {len(layers_to_ablate)} layers")
 
     # 1) Layer ablation experiment
     ablation_prompt = test_prompts[0]
@@ -171,20 +209,16 @@ def main(model_name=None, output_dir=None, cpu_only=False):
     baseline_ablation, ablation_results = layer_ablation_experiment(model, tokenizer, ablation_prompt, layers_to_ablate)
     print(f"\n📊 Baseline perplexity: {baseline_ablation:.2f}")
     print("📉 Layer Ablation Results:")
-    for layer, ppl in ablation_results.items():
+    for layer, ppl in sorted(ablation_results.items(), key=lambda x: x[1], reverse=True):
         print(f"Layer: {layer} -> Perplexity after ablation: {ppl:.2f} (Impact: {ppl/baseline_ablation:.2f}x)")
 
-    # Save results if output directory is provided
-    if output_dir:
-        output_dir = os.path.abspath(output_dir)
-        print(f"\n💾 Saving results to: {output_dir}")
-        save_results_to_file(output_dir, model_name, baseline_ablation, ablation_results)
-    else:
-        print("\n⚠️ No output directory specified. Results will not be saved.")
+    # Save results using output manager
+    output_dir = save_results_to_file(model_name, baseline_ablation, ablation_results)
 
     # Offer to create a data file with the model weights
     print("\n🧠 Model successfully analyzed.")
     print("ℹ️ In future runs, the model will be loaded from local cache")
+    print(f"\n📊 View results in the dashboard: python manage_outputs.py open-dashboard")
 
 if __name__ == "__main__":
     main()
