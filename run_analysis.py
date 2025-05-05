@@ -115,6 +115,8 @@ def main():
                         help='Use parallel processing for large models')
     parser.add_argument('--interactive', action='store_true',
                         help='Use interactive mode for selective pruning')
+    parser.add_argument('--cpu-only', action='store_true',
+                        help='Force CPU-only mode for model loading and inference')
     
     # Additional arguments for selective weight pruning
     parser.add_argument('--prune-method', type=str, default='zero',
@@ -226,6 +228,13 @@ def main():
     os.environ["SKIP_FINETUNE"] = "1" if args.skip_finetune else "0"
     os.environ["OUTPUT_DIR"] = args.output_dir
     
+    # Set CPU-only mode if requested
+    if args.cpu_only:
+        print("\n⚠️ Using CPU-only mode for model loading and inference")
+        os.environ["CUDA_VISIBLE_DEVICES"] = ""
+        os.environ["BNB_FORCE_CPU"] = "1"
+        os.environ["USE_CPU_ONLY"] = "1"
+    
     print(f"\n🚀 Running {args.analysis} analysis on model: {args.model}")
     print(f"📊 Using module: {module_name}")
     
@@ -313,7 +322,8 @@ def main():
                 "save_weights": args.save_weights,
                 "compute_metrics": args.compute_metrics,
                 "visualize": args.visualize,
-                "interactive": args.interactive
+                "interactive": args.interactive,
+                "cpu_only": args.cpu_only
             }
             
             # Add parameters that exist in the function signature
@@ -365,7 +375,8 @@ def main():
                 "save_weights": args.save_weights,
                 "compute_metrics": args.compute_metrics,
                 "visualize": args.visualize,
-                "interactive": args.interactive
+                "interactive": args.interactive,
+                "cpu_only": args.cpu_only
             }
             
             # Add all parameters with non-None values (except use_cache and parallel which were handled separately)
