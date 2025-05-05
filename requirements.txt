@@ -16,3 +16,8 @@ mpi4py
 colorama
 accelerate>=0.26.0
 bitsandbytes
+
+captum
+shap
+robustness
+neural-tangents

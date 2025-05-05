@@ -74,6 +74,9 @@ Each analysis method helps identify different aspects of weight sensitivity and 
 # cd villanova_research_v2
 
 # Install Python dependencies
+python -m venv .venv && source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install --upgrade setuptools
 pip install -r requirements.txt
 ```
 
