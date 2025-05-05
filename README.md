@@ -88,7 +88,33 @@ For models that require authentication (like Llama):
 2. Add your Hugging Face token: `HUGGINGFACE_TOKEN=your_token_here`
 3. Get a token at https://huggingface.co/settings/tokens
 
-### Step 3: Verify Setup
+### Step 3: Automated Setup (Optional)
+
+Alternatively, you can run the provided setup script which handles all of the following:
+- Environment setup
+- Dependencies installation
+- Git configuration
+- Hugging Face authentication
+- Oh My Posh terminal setup (for better CLI experience)
+
+```bash
+# Make the setup script executable
+chmod +x setup_v2.sh
+
+# Run the setup script
+./setup_v2.sh
+```
+
+The setup script will:
+- Load your Hugging Face token from .env file
+- Configure Git settings
+- Update system packages
+- Install development dependencies
+- Install Python requirements
+- Set up Oh My Posh for a better terminal experience
+- Install Nerd Fonts for terminal icons
+
+### Step 4: Verify Setup
 
 ```bash
 # Run a simple test to verify everything is working
@@ -120,22 +146,80 @@ python run_analysis.py --model gpt-neo-125m --analysis super-weights --method gr
 python run_analysis.py --model gpt-neo-125m --analysis super-weights --method z_score
 
 # Use Hessian-based approach (more computationally intensive but more accurate)
-python run_analysis.py --model gpt-neo-125m --analysis super-weights --method hessian
+python run_analysis.py --model gpt-neo-125m --analysis super-weights --method hessian --z-threshold 3.0
 
 # Use integrated gradients for attribution (balanced approach)
-python run_analysis.py --model gpt-neo-125m --analysis super-weights --method integrated
+python run_analysis.py --model gpt-neo-125m --analysis super-weights --method integrated --top-k 2000
 ```
 
 ### Selective Weight Pruning Commands
 
 ```bash
-# Basic syntax
-python selective_weight_pruning.py --model MODEL_NAME --method METHOD --component COMPONENT --layers LAYERS --percentile PERCENTILE --threshold THRESHOLD --prune-method METHOD --evaluate
+# Using centralized run_analysis.py interface (recommended)
+python run_analysis.py --analysis selective-pruning --model gpt-neo-125m --interactive
 
-# Example: Prune specific transformer layers using gradient-based sensitivity
+# Advanced pruning with specific targeting
+python run_analysis.py --analysis selective-pruning --model gpt-neo-125m --method gradient --component value --layers transformer.h.3,transformer.h.4 --percentile 80 --threshold 0.3 --prune-method zero
+
+# Direct script usage (legacy approach)
 python selective_weight_pruning.py --model gpt-neo-125m --method gradient --component value --layers transformer.h.3,transformer.h.4 --percentile 80 --threshold 0.3 --prune-method zero --evaluate
 
 # Important: Make sure to use the correct model name format with dashes (e.g., "gpt-neo-125m" NOT "gptneo125m")
+```
+
+### Robustness Testing Commands
+
+```bash
+# Standard robustness test with default noise parameters
+python run_analysis.py --analysis robustness --model gpt-neo-125m
+
+# Customize noise type and level
+python run_analysis.py --analysis robustness --model gpt-neo-125m --noise-type gaussian --noise-level 0.05
+
+# Test different types of noise
+python run_analysis.py --analysis robustness --model gpt-neo-125m --noise-type uniform --noise-level 0.1
+```
+
+### Adversarial Testing Commands
+
+```bash
+# Run default adversarial testing
+python run_analysis.py --analysis adversarial --model gpt-neo-125m
+
+# Specify attack type
+python run_analysis.py --analysis adversarial --model gpt-neo-125m --attack-type token_swap
+
+# Available attack types: gradient, random, token_swap, char_level
+python run_analysis.py --analysis adversarial --model gpt-neo-125m --attack-type char_level
+```
+
+### Bit-Level Analysis Commands
+
+```bash
+# Run standard bit-level analysis
+python run_analysis.py --analysis bit-level --model gpt-neo-125m
+
+# Perform quantization analysis
+python run_analysis.py --analysis bit-level --model gpt-neo-125m --quantize --quantize-bits 4
+
+# Target specific bit positions
+python run_analysis.py --analysis bit-level --model gpt-neo-125m --bits 0,1,2,7,15
+```
+
+### Model Evaluation Commands
+
+```bash
+# Standard evaluation
+python run_analysis.py --analysis evaluate --model gpt-neo-125m
+
+# Use a custom prompt for evaluation
+python run_analysis.py --analysis evaluate --model gpt-neo-125m --prompt "Explain quantum computing:"
+
+# Generate more samples during evaluation
+python run_analysis.py --analysis evaluate --model gpt-neo-125m --generate-samples 10 --max-tokens 200
+
+# Compare with another model
+python run_analysis.py --analysis evaluate --model gpt-neo-125m --compare-with gpt-j-6b
 ```
 
 ### Comparative Analysis Commands
@@ -145,7 +229,26 @@ python selective_weight_pruning.py --model gpt-neo-125m --method gradient --comp
 python run_analysis.py --model gpt-neo-125m --analysis compare-sensitivity --methods gradient,z_score,integrated
 
 # Run targeted perturbation on identified super weights
-python run_analysis.py --model gpt-neo-125m --analysis targeted-perturbation
+python run_analysis.py --model gpt-neo-125m --analysis targeted-perturbation --perturb-ratio 0.02
+
+# Compare robustness across different models
+python run_analysis.py --analysis compare-sensitivity --model gpt-neo-125m --compare-with llama-2-7b
+```
+
+### Integrated Analysis Commands
+
+```bash
+# Run comprehensive integrated analysis
+python run_analysis.py --analysis integrated --model gpt-neo-125m
+
+# Save visualizations
+python run_analysis.py --analysis integrated --model gpt-neo-125m --visualize
+
+# Compute additional metrics
+python run_analysis.py --analysis integrated --model gpt-neo-125m --compute-metrics
+
+# Run all analyses and save weights
+python run_analysis.py --analysis integrated --model gpt-neo-125m --run-all --save-weights
 ```
 
 ### Listing Available Options
@@ -158,7 +261,7 @@ python run_analysis.py --list-models
 python run_analysis.py --list-analyses
 ```
 
-### Advanced Options
+### General Options (Apply to Most Analyses)
 
 ```bash
 # Skip fine-tuning step in analyses that require it
@@ -169,6 +272,13 @@ python run_analysis.py --output-dir ./my_custom_output
 
 # Change sensitivity threshold for super weight identification
 python run_analysis.py --analysis super-weights --threshold 0.8
+
+# Enable or disable parallel processing
+python run_analysis.py --analysis super-weights --parallel  # Enable (default)
+python run_analysis.py --analysis super-weights --no-parallel  # Disable
+
+# Use cached results when available
+python run_analysis.py --analysis super-weights --use-cache
 ```
 
 ## 📊 Analysis Types

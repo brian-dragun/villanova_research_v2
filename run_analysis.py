@@ -39,6 +39,10 @@ def list_available_analyses():
             "module": "llm_prune_model",
             "description": "Prune model weights based on sensitivity analysis"
         },
+        "selective-pruning": {
+            "module": "selective_weight_pruning",
+            "description": "Advanced pruning with fine-grained control over which weights to remove"
+        },
         "robustness": {
             "module": "llm_robustness_test",
             "description": "Test model robustness under various conditions"
@@ -75,11 +79,11 @@ def list_available_analyses():
     
     print("\n📊 Available Analysis Types:")
     print("-" * 80)
-    print(f"{'Type':<15} | {'Module':<35} | Description")
+    print(f"{'Type':<20} | {'Module':<35} | Description")
     print("-" * 80)
     
     for key, details in analyses.items():
-        print(f"{key:<15} | {details['module']:<35} | {details['description']}")
+        print(f"{key:<20} | {details['module']:<35} | {details['description']}")
     
     print("-" * 80)
     
@@ -109,6 +113,71 @@ def main():
                         help='Use cached results when available to speed up analysis')
     parser.add_argument('--parallel', action='store_true', default=True,
                         help='Use parallel processing for large models')
+    parser.add_argument('--interactive', action='store_true',
+                        help='Use interactive mode for selective pruning')
+    
+    # Additional arguments for selective weight pruning
+    parser.add_argument('--prune-method', type=str, default='zero',
+                        choices=['zero', 'mean', 'small_noise'],
+                        help='Pruning method to apply (for pruning analyses)')
+    parser.add_argument('--layers', type=str, default='all',
+                        help='Comma-separated list of layers to target (for pruning analyses)')
+    parser.add_argument('--component', type=str, default=None,
+                        help='Specific component to target (query, key, value, etc. for pruning)')
+    parser.add_argument('--percentile', type=float, default=100,
+                        help='Top percentile to select for pruning (0-100)')
+    parser.add_argument('--max-per-layer', type=int, default=1000,
+                        help='Maximum weights to prune per layer')
+    parser.add_argument('--sensitivity-file', type=str, default=None,
+                        help='Path to pre-computed sensitivity data (for pruning)')
+    
+    # Arguments for robustness testing
+    parser.add_argument('--noise-type', type=str, default='gaussian',
+                        choices=['gaussian', 'uniform', 'targeted'],
+                        help='Type of noise to use for robustness testing')
+    parser.add_argument('--noise-level', type=float, default=0.01,
+                        help='Noise level for robustness testing (0.0-1.0)')
+    parser.add_argument('--attack-type', type=str, default='gradient',
+                        choices=['gradient', 'random', 'token_swap', 'char_level'],
+                        help='Type of attack for adversarial testing')
+    
+    # Arguments for bit-level analysis
+    parser.add_argument('--bits', type=str, default=None,
+                        help='Comma-separated list of bit positions to flip (for bit-level analysis)')
+    parser.add_argument('--quantize', action='store_true',
+                        help='Perform quantization analysis')
+    parser.add_argument('--quantize-bits', type=int, default=8,
+                        help='Number of bits to use for quantization analysis')
+    
+    # Arguments for model evaluation
+    parser.add_argument('--eval-tasks', type=str, default='all',
+                        help='Comma-separated list of evaluation tasks (for evaluate)')
+    parser.add_argument('--compare-with', type=str, default=None,
+                        help='Model to compare with (for comparative analyses)')
+    parser.add_argument('--prompt', type=str, default=None,
+                        help='Custom prompt for testing')
+    parser.add_argument('--generate-samples', type=int, default=5,
+                        help='Number of text samples to generate when evaluating')
+    parser.add_argument('--max-tokens', type=int, default=100,
+                        help='Maximum tokens to generate when testing')
+    
+    # Arguments for super weights analysis
+    parser.add_argument('--z-threshold', type=float, default=2.5,
+                        help='Z-score threshold for super weight identification')
+    parser.add_argument('--top-k', type=int, default=1000,
+                        help='Top-K weights to consider in sensitivity analysis')
+    parser.add_argument('--perturb-ratio', type=float, default=0.01,
+                        help='Ratio of weights to perturb in targeted perturbation')
+    
+    # Arguments for integrated analysis
+    parser.add_argument('--run-all', action='store_true',
+                        help='Run all analysis types in sequence')
+    parser.add_argument('--save-weights', action='store_true',
+                        help='Save modified weights after analysis')
+    parser.add_argument('--compute-metrics', action='store_true',
+                        help='Compute additional metrics during analysis')
+    parser.add_argument('--visualize', action='store_true',
+                        help='Generate visualizations for results')
     
     args = parser.parse_args()
     
@@ -124,6 +193,7 @@ def main():
     analyses = {
         "sensitivity": "llm_weight_sensitivity_analysis",
         "pruning": "llm_prune_model",
+        "selective-pruning": "selective_weight_pruning",
         "robustness": "llm_robustness_test",
         "adversarial": "llm_adversarial_test",
         "bit-level": "llm_bit_level_and_ablation_analysis",
@@ -131,7 +201,8 @@ def main():
         "evaluate": "llm_evaluate_models",
         "super-weights": "llm_super_weights",
         "compare-sensitivity": "llm_analyze_sensitivity",
-        "targeted-perturbation": "llm_super_weights"
+        "targeted-perturbation": "llm_super_weights",
+        "run-model": "run_model"
     }
     
     if args.analysis not in analyses:
@@ -166,6 +237,32 @@ def main():
         os.environ["MODEL_NAME"] = args.model
         os.environ["OUTPUT_DIR"] = args.output_dir
         
+        # Special handling for selective pruning if interactive mode is enabled
+        if args.analysis == "selective-pruning" and args.interactive:
+            print("\n🔍 Running selective pruning in interactive mode...")
+            if hasattr(analysis_module, "run_selective_pruning"):
+                # Create an args-like object with the interactive flag
+                from types import SimpleNamespace
+                pruning_args = SimpleNamespace(
+                    model=args.model,
+                    method=args.method or "gradient",
+                    threshold=args.threshold,
+                    percentile=args.percentile,
+                    prune_method=args.prune_method,
+                    layers=args.layers,
+                    component=args.component,
+                    max_per_layer=args.max_per_layer,
+                    sensitivity_file=args.sensitivity_file,
+                    no_parallel=not args.parallel,
+                    evaluate=True,
+                    interactive=True
+                )
+                analysis_module.run_selective_pruning(pruning_args)
+            else:
+                print("\n⚠️ Interactive mode not available for this module")
+                sys.exit(1)
+            return
+        
         # Check if the module has a main function with the expected parameters
         if hasattr(analysis_module, "main"):
             # Try to inspect the function signature to determine parameters
@@ -190,6 +287,40 @@ def main():
             if "parallel" in param_names:
                 kwargs["parallel"] = args.parallel
             
+            # Add all the new parameters we've added
+            param_mapping = {
+                "prune_method": args.prune_method,
+                "layers": args.layers,
+                "component": args.component,
+                "percentile": args.percentile,
+                "max_per_layer": args.max_per_layer,
+                "sensitivity_file": args.sensitivity_file,
+                "noise_type": args.noise_type,
+                "noise_level": args.noise_level,
+                "attack_type": args.attack_type,
+                "bits": args.bits,
+                "quantize": args.quantize,
+                "quantize_bits": args.quantize_bits,
+                "eval_tasks": args.eval_tasks,
+                "compare_with": args.compare_with,
+                "prompt": args.prompt,
+                "generate_samples": args.generate_samples,
+                "max_tokens": args.max_tokens,
+                "z_threshold": args.z_threshold,
+                "top_k": args.top_k,
+                "perturb_ratio": args.perturb_ratio,
+                "run_all": args.run_all,
+                "save_weights": args.save_weights,
+                "compute_metrics": args.compute_metrics,
+                "visualize": args.visualize,
+                "interactive": args.interactive
+            }
+            
+            # Add parameters that exist in the function signature
+            for param, value in param_mapping.items():
+                if param in param_names:
+                    kwargs[param] = value
+            
             # Call the main function with appropriate parameters
             if kwargs:
                 analysis_module.main(**kwargs)
@@ -204,14 +335,43 @@ def main():
             }
             
             # Add optional parameters if they're provided
-            if args.method is not None:
-                kwargs["method"] = args.method
-            if args.methods is not None:
-                kwargs["methods"] = args.methods
-            if args.threshold is not None:
-                kwargs["threshold"] = args.threshold
-            kwargs["use_cache"] = args.use_cache
-            kwargs["parallel"] = args.parallel
+            param_mapping = {
+                "method": args.method,
+                "methods": args.methods,
+                "threshold": args.threshold,
+                "use_cache": args.use_cache,
+                "parallel": args.parallel,
+                "prune_method": args.prune_method,
+                "layers": args.layers,
+                "component": args.component,
+                "percentile": args.percentile,
+                "max_per_layer": args.max_per_layer,
+                "sensitivity_file": args.sensitivity_file,
+                "noise_type": args.noise_type,
+                "noise_level": args.noise_level,
+                "attack_type": args.attack_type,
+                "bits": args.bits,
+                "quantize": args.quantize,
+                "quantize_bits": args.quantize_bits,
+                "eval_tasks": args.eval_tasks,
+                "compare_with": args.compare_with,
+                "prompt": args.prompt,
+                "generate_samples": args.generate_samples,
+                "max_tokens": args.max_tokens,
+                "z_threshold": args.z_threshold,
+                "top_k": args.top_k,
+                "perturb_ratio": args.perturb_ratio,
+                "run_all": args.run_all,
+                "save_weights": args.save_weights,
+                "compute_metrics": args.compute_metrics,
+                "visualize": args.visualize,
+                "interactive": args.interactive
+            }
+            
+            # Add all parameters with non-None values (except use_cache and parallel which were handled separately)
+            for param, value in param_mapping.items():
+                if value is not None and param not in ["use_cache", "parallel"]:
+                    kwargs[param] = value
                 
             # Call run_analysis with the kwargs
             analysis_module.run_analysis(**kwargs)

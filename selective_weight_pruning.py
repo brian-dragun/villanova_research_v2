@@ -538,6 +538,226 @@ class SelectiveWeightPruner:
         
         return results
 
+    def interactive_pruning(self):
+        """
+        Interactive CLI for selecting weights to prune based on sensitivity data.
+        This allows for manual inspection and selection of weights.
+        
+        Returns:
+            Dictionary of pruning targets selected interactively
+        """
+        if self.sensitivity_data is None:
+            print("⚠️ No sensitivity data available. Computing default sensitivity...")
+            self.compute_sensitivity(method="gradient")
+            
+        print("\n🔍 Interactive Weight Pruning Mode")
+        print("="*50)
+            
+        # Flatten and sort all weights by sensitivity
+        all_weights = []
+        for layer_name, weights in self.sensitivity_data.items():
+            for idx, score in weights:
+                all_weights.append((layer_name, idx, score))
+                
+        # Sort by sensitivity score (descending)
+        all_weights.sort(key=lambda x: x[2], reverse=True)
+        
+        # Display top and bottom weights
+        top_n = 20
+        print(f"\nTop {top_n} most sensitive weights:")
+        print(f"{'Rank':<6}{'Layer':<40}{'Index':<12}{'Score':<10}")
+        print("-" * 68)
+        for i, (layer, idx, score) in enumerate(all_weights[:top_n]):
+            print(f"{i+1:<6}{layer[:37]+'...' if len(layer) > 40 else layer:<40}{idx:<12}{score:<.4f}")
+            
+        print(f"\nBottom {top_n} least sensitive weights:")
+        print(f"{'Rank':<6}{'Layer':<40}{'Index':<12}{'Score':<10}")
+        print("-" * 68)
+        for i, (layer, idx, score) in enumerate(all_weights[-top_n:]):
+            print(f"{len(all_weights)-i:<6}{layer[:37]+'...' if len(layer) > 40 else layer:<40}{idx:<12}{score:<.4f}")
+            
+        # Display layer types
+        layer_types = defaultdict(int)
+        for layer in self.sensitivity_data.keys():
+            if "query" in layer:
+                layer_type = "attention_query"
+            elif "key" in layer:
+                layer_type = "attention_key"
+            elif "value" in layer:
+                layer_type = "attention_value"
+            elif "out_proj" in layer:
+                layer_type = "attention_output"
+            elif "mlp" in layer or "ffn" in layer:
+                layer_type = "ffn"
+            elif "embedding" in layer:
+                layer_type = "embedding"
+            elif "head" in layer or "lm_head" in layer:
+                layer_type = "output_head"
+            else:
+                layer_type = "other"
+            layer_types[layer_type] += len(self.sensitivity_data[layer])
+            
+        print("\nWeight distribution by layer type:")
+        for layer_type, count in layer_types.items():
+            print(f"- {layer_type}: {count} weights")
+        
+        # Interactive selection menu
+        print("\n--- Selection Menu ---")
+        print("1. Select by sensitivity threshold")
+        print("2. Select by percentile")
+        print("3. Select specific layer type")
+        print("4. Manual selection (advanced)")
+        print("5. Cancel and return to automatic mode")
+        
+        choice = input("\nEnter your choice (1-5): ")
+        
+        pruning_targets = defaultdict(list)
+        
+        if choice == "1":
+            threshold = float(input("Enter sensitivity threshold (lower = more weights pruned): "))
+            for layer_name, weights in self.sensitivity_data.items():
+                for idx, score in weights:
+                    if score <= threshold:
+                        pruning_targets[layer_name].append((idx, score))
+                        
+        elif choice == "2":
+            percentile = float(input("Enter percentile threshold (0-100, lower = fewer weights kept): "))
+            cutoff_idx = int(len(all_weights) * (1 - percentile/100))
+            selected_weights = all_weights[cutoff_idx:]
+            
+            for layer_name, idx, score in selected_weights:
+                pruning_targets[layer_name].append((idx, score))
+                
+        elif choice == "3":
+            print("\nAvailable layer types:")
+            for i, layer_type in enumerate(layer_types.keys()):
+                print(f"{i+1}. {layer_type}")
+                
+            layer_choice = input("Select layer type number: ")
+            try:
+                selected_layer_type = list(layer_types.keys())[int(layer_choice)-1]
+                proportion = float(input(f"What proportion of {selected_layer_type} weights to prune (0-1): "))
+                
+                for layer_name, weights in self.sensitivity_data.items():
+                    if selected_layer_type == "attention_query" and "query" in layer_name:
+                        target = True
+                    elif selected_layer_type == "attention_key" and "key" in layer_name:
+                        target = True
+                    elif selected_layer_type == "attention_value" and "value" in layer_name:
+                        target = True
+                    elif selected_layer_type == "attention_output" and "out_proj" in layer_name:
+                        target = True
+                    elif selected_layer_type == "ffn" and ("mlp" in layer_name or "ffn" in layer_name):
+                        target = True
+                    elif selected_layer_type == "embedding" and "embedding" in layer_name:
+                        target = True
+                    elif selected_layer_type == "output_head" and ("head" in layer_name or "lm_head" in layer_name):
+                        target = True
+                    elif selected_layer_type == "other" and not any(x in layer_name for x in ["query", "key", "value", "out_proj", "mlp", "ffn", "embedding", "head"]):
+                        target = True
+                    else:
+                        target = False
+                        
+                    if target:
+                        # Sort by sensitivity
+                        sorted_weights = sorted(weights, key=lambda x: x[1])
+                        # Take the least sensitive weights up to the proportion
+                        num_to_take = int(len(sorted_weights) * proportion)
+                        for idx, score in sorted_weights[:num_to_take]:
+                            pruning_targets[layer_name].append((idx, score))
+            except (ValueError, IndexError):
+                print("Invalid selection, returning to main menu")
+                return self.interactive_pruning()
+                
+        elif choice == "4":
+            print("\n⚠️ Advanced mode - manually select weight ranges")
+            print("Example syntax: 'layer.weight:1,2,5-10 layer2.bias:1-3'")
+            print("This would select indices 1,2,5-10 in layer.weight and 1-3 in layer2.bias")
+            
+            manual_selection = input("Enter selection pattern (or 'help' for syntax): ")
+            
+            if manual_selection.lower() == "help":
+                print("\nSyntax help:")
+                print("- Separate layers with spaces")
+                print("- For each layer, use layername:indices format")
+                print("- Indices can be comma-separated or ranges with hyphens")
+                print("- Example: 'transformer.h.0.attn.c_proj.weight:0-100,200 transformer.h.1.mlp.c_fc.weight:0-50'")
+                return self.interactive_pruning()
+            
+            try:
+                selections = manual_selection.split()
+                for selection in selections:
+                    if ":" not in selection:
+                        continue
+                        
+                    layer_name, indices_str = selection.split(":")
+                    
+                    if layer_name not in self.params_dict:
+                        print(f"⚠️ Warning: Layer '{layer_name}' not found in model")
+                        matching_layers = [l for l in self.params_dict.keys() if layer_name in l]
+                        if matching_layers:
+                            print(f"Did you mean one of: {', '.join(matching_layers[:3])}")
+                        continue
+                    
+                    indices_parts = indices_str.split(",")
+                    indices = []
+                    
+                    for part in indices_parts:
+                        if "-" in part:
+                            start, end = map(int, part.split("-"))
+                            indices.extend(range(start, end + 1))
+                        else:
+                            indices.append(int(part))
+                    
+                    # Assign dummy scores for these manually selected weights
+                    for idx in indices:
+                        pruning_targets[layer_name].append((idx, 0.0))
+            except Exception as e:
+                print(f"⚠️ Error parsing selection: {e}")
+                return self.interactive_pruning()
+        
+        elif choice == "5":
+            print("Returning to automatic mode")
+            return None
+        
+        else:
+            print("Invalid choice, returning to main menu")
+            return self.interactive_pruning()
+        
+        # Summarize selection
+        total_weights = sum(len(indices) for indices in pruning_targets.values())
+        print(f"\n✅ Selected {total_weights} weights for pruning across {len(pruning_targets)} layers")
+        
+        # Ask about pruning method
+        print("\nSelect pruning method:")
+        print("1. Zero out weights")
+        print("2. Replace with mean values")
+        print("3. Replace with small random noise")
+        
+        method_choice = input("Enter pruning method (1-3): ")
+        method_map = {"1": "zero", "2": "mean", "3": "small_noise"}
+        
+        if method_choice in method_map:
+            prune_method = method_map[method_choice]
+            confirm = input(f"\nConfirm pruning {total_weights} weights using '{prune_method}' method? (y/n): ")
+            
+            if confirm.lower() == 'y':
+                result = self.apply_pruning(pruning_targets, method=prune_method)
+                print(f"\n✅ Applied {prune_method} pruning to {total_weights} weights")
+                
+                # Offer to evaluate
+                eval_choice = input("Would you like to evaluate the pruned model? (y/n): ")
+                if eval_choice.lower() == 'y':
+                    self.evaluate_model()
+                    
+                return pruning_targets
+            else:
+                print("Pruning cancelled")
+                return None
+        else:
+            print("Invalid method selection, using default 'zero' method")
+            return pruning_targets
+
 
 def run_selective_pruning(args):
     """
@@ -581,24 +801,32 @@ def run_selective_pruning(args):
     else:
         pruner.compute_sensitivity(method=args.method, use_parallel=(not args.no_parallel))
     
-    # Define pruning criteria based on command line args
-    criteria = {
-        'threshold': args.threshold,
-        'percentile': args.percentile,
-        'max_per_layer': args.max_per_layer
-    }
-    
-    if args.layers != 'all':
-        criteria['layers'] = args.layers.split(',')
+    # Check if interactive mode is enabled
+    if args.interactive:
+        print("\n🔍 Starting interactive pruning mode...")
+        targets = pruner.interactive_pruning()
+        if targets is None:
+            print("\n❌ Interactive pruning cancelled.")
+            return None
+    else:
+        # Define pruning criteria based on command line args
+        criteria = {
+            'threshold': args.threshold,
+            'percentile': args.percentile,
+            'max_per_layer': args.max_per_layer
+        }
         
-    if args.component:
-        criteria['component'] = args.component
-    
-    # Select weights to prune
-    targets = pruner.select_weights_to_prune(criteria)
-    
-    # Apply pruning
-    pruner.apply_pruning(targets, method=args.prune_method)
+        if args.layers != 'all':
+            criteria['layers'] = args.layers.split(',')
+            
+        if args.component:
+            criteria['component'] = args.component
+        
+        # Select weights to prune
+        targets = pruner.select_weights_to_prune(criteria)
+        
+        # Apply pruning
+        pruner.apply_pruning(targets, method=args.prune_method)
     
     # Evaluate pruned model
     if args.evaluate:
@@ -653,6 +881,8 @@ def main():
                        help="Disable parallel processing")
     parser.add_argument("--evaluate", action="store_true",
                        help="Evaluate model after pruning")
+    parser.add_argument("--interactive", action="store_true",
+                       help="Use interactive mode to manually select weights")
     
     args = parser.parse_args()
     run_selective_pruning(args)
