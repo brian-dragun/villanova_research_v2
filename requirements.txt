@@ -17,6 +17,9 @@ colorama
 accelerate>=0.26.0
 bitsandbytes
 nltk
+seaborn
+pandas
+numpy
 
 captum
 shap
